@@ -156,7 +156,7 @@ class Shell(Base):
 
     def _simple_wait(self, procs):
         if procs[0].stdin_stream:
-            procs[0].communicate(stdin_stream.read())
+            procs[0].communicate(procs[0].stdin_stream.read())
         else:
             for proc in procs:
                 if proc.stdout_stream:
@@ -166,7 +166,7 @@ class Shell(Base):
                 else:
                     continue
                 break
-        return [proc.wait() for proc in procs]
+        return tuple(proc.wait() for proc in procs)
 
     def _setup_redirect(self, proc_opts, key):
         stream = proc_opts.get(key, None)
@@ -229,7 +229,7 @@ class Command(Base):
     def __or__(self, other):
         return Pipeline([self, other])
 
-    def __lt__(self, stdin):
+    def __lt__(self, stream):
         return self._redirect('stdin', stream)
 
     def __gt__(self, stream):
