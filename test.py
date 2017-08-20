@@ -32,5 +32,7 @@ def test_redirect_stdin():
 def test_redirect_stdout_and_stdin():
     source = six.BytesIO()
     source.write(b'abc\ndef')
+    source.seek(0)
     sink = six.BytesIO()
     assert sh((cat < source) > sink) == (0,)
+    assert sink.getvalue() == source.getvalue()

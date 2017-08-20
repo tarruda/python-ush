@@ -1,5 +1,6 @@
 import subprocess
 import sys
+import threading
 
 
 STDOUT = subprocess.STDOUT
@@ -148,11 +149,44 @@ class Shell(Base):
 
     def _wait(self, procs):
         if self._need_concurrent_wait(procs):
-            return self._concurrent_wait(procs)
-        return self._simple_wait(procs)
+            self._concurrent_wait(procs)
+        else:
+            self._simple_wait(procs)
+        return tuple(proc.wait() for proc in procs)
 
     def _concurrent_wait(self, procs):
-        raise Exception('not implemented')
+        # make a list of (readable streams, sinks) tuples
+        readers = [(proc.stderr, proc.stderr_stream) for proc in procs
+                   if proc.stderr_stream]
+        if procs[-1].stdout_stream:
+            readers.append((proc.stdout, proc.stdout_stream))
+        self._concurrent_read_write(readers, procs[0].stdin,
+                                    procs[0].stdin_stream)
+
+    def _concurrent_read_write(self, readers, write_stream, source):
+        threads = []
+        for read_stream, sink in readers:
+            threads.append(threading.Thread(
+                target=lambda r, s: s.write(r.read()),
+                args=(read_stream, sink)))
+            threads[-1].setDaemon(True)
+            threads[-1].start()
+        if write_stream:
+            try:
+                write_stream.write(source.read())
+            except IOError as e:
+                if e.errno == errno.EPIPE:
+                    # communicate() should ignore broken pipe error
+                    pass
+                elif (e.errno == errno.EINVAL and self.poll() is not None):
+                    # Issue #19612: stdin.write() fails with EINVAL
+                    # if the process already exited before the write
+                    pass
+                else:
+                    raise
+            write_stream.close()
+        for t in threads:
+            t.join()
 
     def _simple_wait(self, procs):
         if procs[0].stdin_stream:
@@ -166,7 +200,6 @@ class Shell(Base):
                 else:
                     continue
                 break
-        return tuple(proc.wait() for proc in procs)
 
     def _setup_redirect(self, proc_opts, key):
         stream = proc_opts.get(key, None)
