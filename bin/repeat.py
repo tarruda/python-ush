@@ -1,8 +1,10 @@
 import argparse
 import sys
 
+from compat import stdout
 
-if sys.version_info[0] > 2:
+
+if sys.version_info[0] < 3:
     range = xrange
 
 
@@ -17,7 +19,7 @@ def main():
     args = parse_argv()
     data = args.data.encode('utf8')
     for _ in range(args.count):
-        sys.stdout.write(data)
+        stdout.write(data)
 
 
 if __name__ == '__main__':

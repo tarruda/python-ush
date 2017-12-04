@@ -111,7 +111,7 @@ class Shell(Base):
             stdout_stream = None
             stderr_stream = None
             # copy argv/opts
-            proc_argv = command.argv[:]
+            proc_argv = [str(a) for a in command.argv]
             proc_opts = command.opts.copy()
             if is_first:
                 # first command in the pipeline may redirect stdin

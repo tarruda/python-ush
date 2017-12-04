@@ -1,14 +1,7 @@
 import argparse
 import shutil
-import sys
 
-
-if sys.version_info[0] >= 3:
-    stdin = sys.stdin.buffer
-    stdout = sys.stdout.buffer
-else:
-    stdin = sys.stdin
-    stdout = sys.stdout
+from compat import stdin, stdout
 
 
 def parse_argv():

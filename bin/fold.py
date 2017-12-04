@@ -1,5 +1,7 @@
 import argparse
-import sys
+
+
+from compat import stdin, stdout
 
 
 def parse_argv():
@@ -9,7 +11,7 @@ def parse_argv():
 
 
 def flush(buf):
-    sys.stdout.write(''.join(buf + ['\n']))
+    stdout.write(b''.join(buf + [b'\n']))
 
 
 def main():
@@ -17,10 +19,10 @@ def main():
     width = args.width
     buf = []
     while True:
-        c = sys.stdin.read(1)
+        c = stdin.read(1)
         if not c:
             break
-        if c == '\n':
+        if c == b'\n':
             flush(buf)
             buf = []
             continue
