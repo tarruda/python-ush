@@ -29,6 +29,14 @@ class AlreadyRedirected(Exception):
     pass
 
 
+def fileobj_has_fileno(fileobj):
+    try:
+        fileobj.fileno()
+        return True
+    except Exception:
+        return False
+
+
 def validate_pipeline(commands):
     for index, command in enumerate(commands):
         is_first = index == 0
@@ -81,7 +89,7 @@ class RunningProcess(object):
         return self.popen.wait()
 
     def stream_count(self):
-        return len(filter(
+        return sum(1 for _ in filter(
             None, [self.stdin_stream, self.stdout_stream, self.stderr_stream]))
 
 
@@ -159,7 +167,7 @@ class Shell(Base):
         readers = [(proc.stderr, proc.stderr_stream) for proc in procs
                    if proc.stderr_stream]
         if procs[-1].stdout_stream:
-            readers.append((proc.stdout, proc.stdout_stream))
+            readers.append((procs[-1].stdout, procs[-1].stdout_stream))
         self._concurrent_read_write(readers, procs[0].stdin,
                                     procs[0].stdin_stream)
 
@@ -203,7 +211,7 @@ class Shell(Base):
 
     def _setup_redirect(self, proc_opts, key):
         stream = proc_opts.get(key, None)
-        if stream is None or hasattr(stream, 'fileno'):
+        if stream is None or fileobj_has_fileno(stream):
             # no changes required
             return
         proc_opts[key] = PIPE
