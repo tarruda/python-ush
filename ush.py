@@ -55,6 +55,79 @@ def validate_pipeline(commands):
             raise InvalidPipeline(msg)
 
 
+def need_concurrent_wait(procs):
+    rv = 0
+    for proc in procs:
+        rv += proc.stream_count()
+    return rv > 1
+
+
+def wait(procs):
+    if need_concurrent_wait(procs):
+        concurrent_wait(procs)
+    else:
+        simple_wait(procs)
+    return tuple(proc.wait() for proc in procs)
+
+
+def concurrent_wait(procs):
+    # make a list of (readable streams, sinks) tuples
+    readers = [(proc.stderr, proc.stderr_stream) for proc in procs
+               if proc.stderr_stream]
+    if procs[-1].stdout_stream:
+        readers.append((procs[-1].stdout, procs[-1].stdout_stream))
+    concurrent_read_write(procs[0], readers)
+
+
+def concurrent_read_write(write_proc, readers):
+    threads = []
+    for read_stream, sink in readers:
+        threads.append(threading.Thread(
+            target=lambda r, s: s.write(r.read()),
+            args=(read_stream, sink)))
+        threads[-1].setDaemon(True)
+        threads[-1].start()
+    if write_proc.stdin:
+        try:
+            write_proc.stdin.write(write_proc.stdin_stream.read())
+        except IOError as e:
+            if e.errno == errno.EPIPE:
+                # communicate() should ignore broken pipe error
+                pass
+            elif (e.errno == errno.EINVAL and write_proc.poll() is not None):
+                # Issue #19612: stdin.write() fails with EINVAL
+                # if the process already exited before the write
+                pass
+            else:
+                raise
+        write_proc.stdin.close()
+    for t in threads:
+        t.join()
+
+
+def simple_wait(procs):
+    if procs[0].stdin_stream:
+        procs[0].communicate(procs[0].stdin_stream.read())
+    else:
+        for proc in procs:
+            if proc.stdout_stream:
+                proc.stdout_stream.write(proc.communicate()[0])
+            elif proc.stderr_stream:
+                proc.stderr_stream.write(proc.communicate()[1])
+            else:
+                continue
+            break
+
+
+def setup_redirect(proc_opts, key):
+    stream = proc_opts.get(key, None)
+    if stream is None or fileobj_has_fileno(stream):
+        # no changes required
+        return
+    proc_opts[key] = PIPE
+    return stream
+
+
 class Base(object):
     def __repr__(self):
         return '<{0} "{1}">'.format(self.__class__.__name__, str(self))
@@ -88,14 +161,16 @@ class RunningProcess(object):
     def wait(self):
         return self.popen.wait()
 
+    def poll(self):
+        return self.popen.poll()
+
     def stream_count(self):
         return sum(1 for _ in filter(
             None, [self.stdin_stream, self.stdout_stream, self.stderr_stream]))
 
 
 class Shell(Base):
-    def __init__(self, throw_on_error=True, **defaults):
-        self.throw_on_error = throw_on_error
+    def __init__(self, **defaults):
         self.defaults = defaults
 
     def command(self, *argv, **opts):
@@ -145,20 +220,20 @@ class Pipeline(Base):
             proc_opts = command.opts.copy()
             if is_first:
                 # first command in the pipeline may redirect stdin
-                stdin_stream = self._setup_redirect(proc_opts, 'stdin')
+                stdin_stream = setup_redirect(proc_opts, 'stdin')
             else:
                 # only set current process stdin if it is not the first in the
                 # pipeline.
                 proc_opts['stdin'] = procs[-1].stdout
             if is_last:
                 # last command in the pipeline may redirect stdout
-                stdout_stream = self._setup_redirect(proc_opts, 'stdout')
+                stdout_stream = setup_redirect(proc_opts, 'stdout')
             else:
                 # only set current process stdout if it is not the last in the
                 # pipeline.
                 proc_opts['stdout'] = PIPE
             # stderr may be set at any point in the pipeline
-            stderr_stream = self._setup_redirect(proc_opts, 'stderr')
+            stderr_stream = setup_redirect(proc_opts, 'stderr')
             set_extra_popen_opts(proc_opts)
             current_proc = RunningProcess(
                 subprocess.Popen(proc_argv, **proc_opts),
@@ -169,87 +244,11 @@ class Pipeline(Base):
                 # is connected to the current process's stdin
                 procs[-1].stdout.close()
             procs.append(current_proc)
-        return self._wait(procs)
-
-    def _need_concurrent_wait(self, procs):
-        rv = 0
-        for proc in procs:
-            rv += proc.stream_count()
-        return rv > 1
-
-    def _find_readable(self, procs):
-        for proc in procs:
-            if proc.stdout_stream:
-                return proc.stdout, proc.stdout_stream
-            elif proc.stderr_stream:
-                return proc.stderr, proc.stderr_stream
-        return None, None
-
-    def _wait(self, procs):
-        if self._need_concurrent_wait(procs):
-            self._concurrent_wait(procs)
-        else:
-            self._simple_wait(procs)
-        return tuple(proc.wait() for proc in procs)
-
-    def _concurrent_wait(self, procs):
-        # make a list of (readable streams, sinks) tuples
-        readers = [(proc.stderr, proc.stderr_stream) for proc in procs
-                   if proc.stderr_stream]
-        if procs[-1].stdout_stream:
-            readers.append((procs[-1].stdout, procs[-1].stdout_stream))
-        self._concurrent_read_write(readers, procs[0].stdin,
-                                    procs[0].stdin_stream)
-
-    def _concurrent_read_write(self, readers, write_stream, source):
-        threads = []
-        for read_stream, sink in readers:
-            threads.append(threading.Thread(
-                target=lambda r, s: s.write(r.read()),
-                args=(read_stream, sink)))
-            threads[-1].setDaemon(True)
-            threads[-1].start()
-        if write_stream:
-            try:
-                write_stream.write(source.read())
-            except IOError as e:
-                if e.errno == errno.EPIPE:
-                    # communicate() should ignore broken pipe error
-                    pass
-                elif (e.errno == errno.EINVAL and self.poll() is not None):
-                    # Issue #19612: stdin.write() fails with EINVAL
-                    # if the process already exited before the write
-                    pass
-                else:
-                    raise
-            write_stream.close()
-        for t in threads:
-            t.join()
-
-    def _simple_wait(self, procs):
-        if procs[0].stdin_stream:
-            procs[0].communicate(procs[0].stdin_stream.read())
-        else:
-            for proc in procs:
-                if proc.stdout_stream:
-                    proc.stdout_stream.write(proc.communicate()[0])
-                elif proc.stderr_stream:
-                    proc.stderr_stream.write(proc.communicate()[1])
-                else:
-                    continue
-                break
-
-    def _setup_redirect(self, proc_opts, key):
-        stream = proc_opts.get(key, None)
-        if stream is None or fileobj_has_fileno(stream):
-            # no changes required
-            return
-        proc_opts[key] = PIPE
-        return stream
+        return wait(procs)
 
 
 class Command(Base):
-    OPTS = ('stdin', 'stdout', 'stderr', 'env', 'cwd',)
+    OPTS = ('stdin', 'stdout', 'stderr', 'env', 'cwd', 'throw_on_error')
 
     def __init__(self, argv, opts):
         self.argv = argv
