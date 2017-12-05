@@ -94,19 +94,49 @@ class RunningProcess(object):
 
 
 class Shell(Base):
-    def __init__(self, throw_on_error=True):
+    def __init__(self, throw_on_error=True, **defaults):
         self.throw_on_error = throw_on_error
+        self.defaults = defaults
 
-    def __call__(self, pipeline):
-        if isinstance(pipeline, Command):
-            pipeline = Pipeline([pipeline])
-        return self._spawn_pipeline(pipeline)
+    def command(self, *argv, **opts):
+        command_opts = {}
+        command_opts.update(self.defaults)
+        command_opts.update(opts)
+        return Command(argv, command_opts)
 
-    def _spawn_pipeline(self, pipeline):
+
+class Pipeline(Base):
+    def __init__(self, commands):
+        validate_pipeline(commands)
+        self.commands = commands
+
+    def __str__(self):
+        return ' | '.join((str(c) for c in self.commands))
+
+    def __or__(self, other):
+        if isinstance(other, Shell):
+            return other(self)
+        elif hasattr(other, 'write'):
+            # assume file-like obj
+            return Pipeline(self.commands[:-1] +
+                            [self.commands[-1]._redirect('stdout', other)])
+        assert isinstance(other, Command)
+        return Pipeline(self.commands + [other])
+
+    def __ror__(self, other):
+        if hasattr(other, 'read'):
+            return Pipeline([self.commands[0]._redirect('stdin', other)] +
+                            self.commands[1:])
+        assert False, "Invalid"
+
+    def __call__(self):
+        return self._spawn()
+
+    def _spawn(self):
         procs = []
-        for index, command in enumerate(pipeline.commands):
+        for index, command in enumerate(self.commands):
             is_first = index == 0
-            is_last = index == len(pipeline.commands) - 1
+            is_last = index == len(self.commands) - 1
             stdin_stream = None
             stdout_stream = None
             stderr_stream = None
@@ -218,31 +248,10 @@ class Shell(Base):
         return stream
 
 
-class Pipeline(Base):
-    def __init__(self, commands):
-        validate_pipeline(commands)
-        self.commands = commands
-
-    def __str__(self):
-        return ' | '.join((str(c) for c in self.commands))
-
-    def __or__(self, command):
-        return Pipeline(self.commands + [command])
-
-    def __lt__(self, stdin):
-        return Pipeline([self.commands[0] < stdin] + self.commands[1:])
-
-    def __gt__(self, stdout):
-        return Pipeline(self.commands[:-1] + [self.commands[-1] > stdout])
-
-    def __ge__(self, stderr):
-        return Pipeline(self.commands[:-1] + [self.commands[-1] >= stderr])
-
-
 class Command(Base):
     OPTS = ('stdin', 'stdout', 'stderr', 'env', 'cwd',)
 
-    def __init__(self, *argv, **opts):
+    def __init__(self, argv, opts):
         self.argv = argv
         self.opts = {}
         for key in Command.OPTS:
@@ -250,11 +259,14 @@ class Command(Base):
                 self.opts[key] = opts[key]
 
     def __call__(self, *argv, **opts):
+        if not argv and not opts:
+            # invoke the command
+            return Pipeline([self])()
         new_opts = self.opts.copy()
         for key in Command.OPTS:
             if key in opts:
                 new_opts[key] = opts[key]
-        return Command(*(self.argv + argv), **new_opts)
+        return Command(self.argv + argv, new_opts)
 
     def __str__(self):
         argstr = ' '.join(self.argv)
@@ -268,16 +280,13 @@ class Command(Base):
             return argstr
 
     def __or__(self, other):
-        return Pipeline([self, other])
+        return Pipeline([self]) | other
 
-    def __lt__(self, stream):
-        return self._redirect('stdin', stream)
+    def __ror__(self, other):
+        return other | Pipeline([self])
 
-    def __gt__(self, stream):
-        return self._redirect('stdout', stream)
-
-    def __ge__(self, stream):
-        return self._redirect('stderr', stream)
+    def __rshift__(self, other):
+        return self._redirect('stderr', other)
 
     def _redirect(self, key, stream):
         if self.opts.get(key, None) is not None:
