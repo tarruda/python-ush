@@ -29,6 +29,10 @@ class AlreadyRedirected(Exception):
     pass
 
 
+class ProcessError(Exception):
+    pass
+
+
 def fileobj_has_fileno(fileobj):
     try:
         fileobj.fileno()
@@ -62,12 +66,15 @@ def need_concurrent_wait(procs):
     return rv > 1
 
 
-def wait(procs):
+def wait(procs, throw_on_error):
     if need_concurrent_wait(procs):
         concurrent_wait(procs)
     else:
         simple_wait(procs)
-    return tuple(proc.wait() for proc in procs)
+    rv = tuple(proc.wait() for proc in procs)
+    if throw_on_error and len(list(filter(lambda c: c != 0, rv))):
+        raise ProcessError('One or more commands failed')
+    return rv
 
 
 def concurrent_wait(procs):
@@ -209,6 +216,7 @@ class Pipeline(Base):
 
     def _spawn(self):
         procs = []
+        throw_on_error = False
         for index, command in enumerate(self.commands):
             is_first = index == 0
             is_last = index == len(self.commands) - 1
@@ -218,6 +226,8 @@ class Pipeline(Base):
             # copy argv/opts
             proc_argv = [str(a) for a in command.argv]
             proc_opts = command.opts.copy()
+            throw_on_error = throw_on_error or proc_opts.get('throw_on_error',
+                                                             False)
             if is_first:
                 # first command in the pipeline may redirect stdin
                 stdin_stream = setup_redirect(proc_opts, 'stdin')
@@ -244,7 +254,7 @@ class Pipeline(Base):
                 # is connected to the current process's stdin
                 procs[-1].stdout.close()
             procs.append(current_proc)
-        return wait(procs)
+        return wait(procs, throw_on_error)
 
 
 class Command(Base):
