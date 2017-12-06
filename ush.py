@@ -128,7 +128,7 @@ def simple_wait(procs):
 
 def setup_redirect(proc_opts, key):
     stream = proc_opts.get(key, None)
-    if stream is None or fileobj_has_fileno(stream):
+    if stream is None  or stream is STDOUT or fileobj_has_fileno(stream):
         # no changes required
         return
     proc_opts[key] = PIPE

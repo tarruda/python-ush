@@ -1,5 +1,4 @@
 import sys
-import bush
 
 import six
 
@@ -61,4 +60,32 @@ def test_three_pipes():
     sink = six.BytesIO()
     assert (repeat_hex | sha256sum | fold('-w', 16) | head('-c', 18) |
             sink)() == (0, 0, 0, 0,)
-    assert (sink.getvalue() == b'1f1a5c83e53c9faa\n8')
+    assert sink.getvalue() == b'1f1a5c83e53c9faa\n8'
+
+
+def test_stderr_redirect():
+    stderr_sink = six.BytesIO()
+    sink = six.BytesIO()
+    source = six.BytesIO()
+    source.write(b'123\n')
+    source.seek(0)
+    assert (source | errmd5 >> stderr_sink | errmd5 >> stderr_sink |
+            sink)() == (0, 0)
+    assert stderr_sink.getvalue() == b'ba1f2511fc30423bdbb183fe33f3dd0f\n' * 2
+    assert sink.getvalue() == b'123\n'
+
+
+def test_stderr_redirect_to_stdout():
+    sink = six.BytesIO()
+    source = six.BytesIO()
+    source.write(b'123\n')
+    source.seek(0)
+    assert (source | errmd5 >> STDOUT | errmd5 | sink)() == (0, 0)
+    assert sink.getvalue() == (b'123\n'
+                               b'ba1f2511fc30423bdbb183fe33f3dd0f\n')
+    source.seek(0)
+    sink.seek(0)
+    assert (source | errmd5 >> STDOUT | errmd5 >> STDOUT | sink)() == (0, 0)
+    assert sink.getvalue() == (b'123\n'
+                               b'ba1f2511fc30423bdbb183fe33f3dd0f\n'
+                               b'ba5d6480bba42f55a708ac7096374f7a\n')
