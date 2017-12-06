@@ -178,14 +178,6 @@ class FileOpenWrapper(object):
         self.path = path
 
 
-class Base(object):
-    def __repr__(self):
-        return '<{0} "{1}">'.format(self.__class__.__name__, str(self))
-
-    def __str__(self):
-        return ''
-
-
 class RunningProcess(object):
     def __init__(self, popen, stdin_stream, stdout_stream, stderr_stream):
         self.popen = popen
@@ -219,7 +211,7 @@ class RunningProcess(object):
             None, [self.stdin_stream, self.stdout_stream, self.stderr_stream]))
 
 
-class Shell(Base):
+class Shell(object):
     def __init__(self, **defaults):
         self.defaults = defaults
 
@@ -230,7 +222,7 @@ class Shell(Base):
         return Command(argv, command_opts)
 
 
-class PipelineBasePy3(Base):
+class PipelineBasePy3(object):
     def __bytes__(self):
         return self._collect_output()
 
@@ -238,7 +230,7 @@ class PipelineBasePy3(Base):
         return bytes(self).decode('utf-8')
 
 
-class PipelineBasePy2(Base):
+class PipelineBasePy2(object):
     def __str__(self):
         return self._collect_output()
 
@@ -334,7 +326,7 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
         return wait(procs, throw_on_error)
 
 
-class Command(Base):
+class Command(object):
     OPTS = ('stdin', 'stdout', 'stderr', 'env', 'cwd', 'throw_on_error')
 
     def __init__(self, argv, opts):
