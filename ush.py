@@ -141,18 +141,41 @@ def simple_wait(procs):
 
 
 def setup_redirect(proc_opts, key):
+    close = False
     stream = proc_opts.get(key, None)
+    if isinstance(stream, FileOpenWrapper):
+        close = True
+        stream = open(stream.path, stream.mode)
+        proc_opts[key] = stream
+    if stream is None or stream is STDOUT or fileobj_has_fileno(stream):
+        # no changes required
+        return None, close
     if key == 'stdin' and isinstance(stream, basestring):
         try:
             stream = stream.encode('utf-8')
         except:
             pass
         stream = BytesIO(stream)
-    if stream is None  or stream is STDOUT or fileobj_has_fileno(stream):
-        # no changes required
-        return
     proc_opts[key] = PIPE
-    return stream
+    return stream, close
+
+
+def read(path):
+    return FileOpenWrapper('rb', path)
+
+
+def truncate(path):
+    return FileOpenWrapper('wb', path)
+
+
+def append(path):
+    return FileOpenWrapper('ab', path)
+
+
+class FileOpenWrapper(object):
+    def __init__(self, mode, path):
+        self.mode = mode
+        self.path = path
 
 
 class Base(object):
@@ -234,7 +257,8 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
     def __or__(self, other):
         if isinstance(other, Shell):
             return other(self)
-        elif hasattr(other, 'write'):
+        elif hasattr(other, 'write') or (
+            isinstance(other, FileOpenWrapper) and other.mode in ['wb', 'ab']):
             # assume file-like obj
             return Pipeline(self.commands[:-1] +
                             [self.commands[-1]._redirect('stdout', other)])
@@ -242,7 +266,8 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
         return Pipeline(self.commands + [other])
 
     def __ror__(self, other):
-        if hasattr(other, 'read') or isinstance(other, basestring):
+        if hasattr(other, 'read') or isinstance(other, basestring) or (
+            isinstance(other, FileOpenWrapper) and other.mode == 'rb'):
             return Pipeline([self.commands[0]._redirect('stdin', other)] +
                             self.commands[1:])
         assert False, "Invalid"
@@ -259,6 +284,9 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
         procs = []
         throw_on_error = False
         for index, command in enumerate(self.commands):
+            close_in = False
+            close_out = False
+            close_err = False
             is_first = index == 0
             is_last = index == len(self.commands) - 1
             stdin_stream = None
@@ -271,25 +299,33 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
                                                              False)
             if is_first:
                 # first command in the pipeline may redirect stdin
-                stdin_stream = setup_redirect(proc_opts, 'stdin')
+                stdin_stream, close_in = setup_redirect(proc_opts, 'stdin')
             else:
                 # only set current process stdin if it is not the first in the
                 # pipeline.
                 proc_opts['stdin'] = procs[-1].stdout
             if is_last:
                 # last command in the pipeline may redirect stdout
-                stdout_stream = setup_redirect(proc_opts, 'stdout')
+                stdout_stream, close_out = setup_redirect(proc_opts, 'stdout')
             else:
                 # only set current process stdout if it is not the last in the
                 # pipeline.
                 proc_opts['stdout'] = PIPE
             # stderr may be set at any point in the pipeline
-            stderr_stream = setup_redirect(proc_opts, 'stderr')
+            stderr_stream, close_err = setup_redirect(proc_opts, 'stderr')
             set_extra_popen_opts(proc_opts)
             current_proc = RunningProcess(
                 subprocess.Popen(proc_argv, **proc_opts),
                 stdin_stream, stdout_stream, stderr_stream
                 )
+            # if files were opened and connected to the process stdio, close
+            # our copies of the descriptors
+            if close_in:
+                proc_opts['stdin'].close()
+            if close_out:
+                proc_opts['stdout'].close()
+            if close_err:
+                proc_opts['stderr'].close()
             if not is_first:
                 # close our copy of the previous process's stdout, now that it
                 # is connected to the current process's stdin

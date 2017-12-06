@@ -3,6 +3,7 @@ import sys
 import six
 
 from helper import *
+from ush import read, truncate, append
 
 
 repeat_hex = repeat('-c', '100', '0123456789abcdef')
@@ -97,3 +98,21 @@ def test_string_input_output():
     assert bytes('abc\ndef' | cat) == b'abc\ndef'
     if six.PY2:
         assert unicode('abc\ndef' | cat) == u'abc\ndef'
+
+
+def test_stdin_redirect_file():
+    assert str(read('.textfile') | cat) == '123\n1234\n12345\n'
+
+
+def test_stdout_stderr_redirect_file():
+    ('hello' | errmd5 >> truncate('.stderr') | truncate('.stdout'))()
+    with open('.stdout', 'rb') as f:
+        assert f.read() == b'hello'
+    with open('.stderr', 'rb') as f:
+        assert f.read() == b'5d41402abc4b2a76b9719d911017c592\n'
+    ('\nworld\n' | errmd5 >> append('.stderr') | append('.stdout'))()
+    with open('.stdout', 'rb') as f:
+        assert f.read() == b'hello\nworld\n'
+    with open('.stderr', 'rb') as f:
+        assert f.read() == (b'5d41402abc4b2a76b9719d911017c592\n'
+                            b'81f82f69f5be2752005dae73e0f22f76\n')
