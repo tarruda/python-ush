@@ -89,3 +89,11 @@ def test_stderr_redirect_to_stdout():
     assert sink.getvalue() == (b'123\n'
                                b'ba1f2511fc30423bdbb183fe33f3dd0f\n'
                                b'ba5d6480bba42f55a708ac7096374f7a\n')
+
+
+
+def test_string_input_output():
+    assert str('abc\ndef' | cat) == 'abc\ndef'
+    assert bytes('abc\ndef' | cat) == b'abc\ndef'
+    if six.PY2:
+        assert unicode('abc\ndef' | cat) == u'abc\ndef'

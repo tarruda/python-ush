@@ -8,6 +8,20 @@ PIPE = subprocess.PIPE
 DEVNULL = object()
 
 
+# We have python2/3 compatibility, but don't want to rely on `six` package so
+# this script can be used independently.
+try:
+  basestring
+  import StringIO
+  BytesIO = StringIO.StringIO
+  PY3 = False
+except NameError:
+  basestring = str
+  import io
+  BytesIO = io.BytesIO
+  PY3 = True
+
+
 if sys.platform != 'win32':
     from signal import signal, SIGPIPE, SIG_DFL
 
@@ -128,6 +142,12 @@ def simple_wait(procs):
 
 def setup_redirect(proc_opts, key):
     stream = proc_opts.get(key, None)
+    if key == 'stdin' and isinstance(stream, basestring):
+        try:
+            stream = stream.encode('utf-8')
+        except:
+            pass
+        stream = BytesIO(stream)
     if stream is None  or stream is STDOUT or fileobj_has_fileno(stream):
         # no changes required
         return
@@ -187,12 +207,28 @@ class Shell(Base):
         return Command(argv, command_opts)
 
 
-class Pipeline(Base):
+class PipelineBasePy3(Base):
+    def __bytes__(self):
+        return self._collect_output()
+
+    def __str__(self):
+        return bytes(self).decode('utf-8')
+
+
+class PipelineBasePy2(Base):
+    def __str__(self):
+        return self._collect_output()
+
+    def __unicode__(self):
+        return str(self).decode('utf-8')
+
+
+class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
     def __init__(self, commands):
         validate_pipeline(commands)
         self.commands = commands
 
-    def __str__(self):
+    def __repr__(self):
         return ' | '.join((str(c) for c in self.commands))
 
     def __or__(self, other):
@@ -206,13 +242,18 @@ class Pipeline(Base):
         return Pipeline(self.commands + [other])
 
     def __ror__(self, other):
-        if hasattr(other, 'read'):
+        if hasattr(other, 'read') or isinstance(other, basestring):
             return Pipeline([self.commands[0]._redirect('stdin', other)] +
                             self.commands[1:])
         assert False, "Invalid"
 
     def __call__(self):
         return self._spawn()
+
+    def _collect_output(self):
+        sink = BytesIO()
+        (self | sink)()
+        return sink.getvalue()
 
     def _spawn(self):
         procs = []
