@@ -116,3 +116,8 @@ def test_stdout_stderr_redirect_file():
     with open('.stderr', 'rb') as f:
         assert f.read() == (b'5d41402abc4b2a76b9719d911017c592\n'
                             b'81f82f69f5be2752005dae73e0f22f76\n')
+
+
+def test_iterator_input():
+    assert str((n for n in [1, 2, 3, 4]) | cat) == '1234'
+    assert str(['ab', 2, '\n', 5] | cat) == 'ab2\n5'

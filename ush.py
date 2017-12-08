@@ -14,11 +14,16 @@ try:
   basestring
   import StringIO
   BytesIO = StringIO.StringIO
+  to_cstr = str
   PY3 = False
 except NameError:
   basestring = str
   import io
   BytesIO = io.BytesIO
+  def to_cstr(obj):
+      if isinstance(obj, bytes):
+          return obj
+      return str(obj).encode('utf-8')
   PY3 = True
 
 
@@ -110,7 +115,8 @@ def concurrent_read_write(write_proc, readers):
         threads[-1].start()
     if write_proc.stdin:
         try:
-            write_proc.stdin.write(write_proc.stdin_stream.read())
+            for chunk in write_proc.stdin_stream:
+                write_proc.stdin.write(to_cstr(chunk))
         except IOError as e:
             if e.errno == errno.EPIPE:
                 # communicate() should ignore broken pipe error
@@ -128,7 +134,8 @@ def concurrent_read_write(write_proc, readers):
 
 def simple_wait(procs):
     if procs[0].stdin_stream:
-        procs[0].communicate(procs[0].stdin_stream.read())
+        chunks = list(procs[0].stdin_stream)
+        procs[0].communicate(b''.join(chunks))
     else:
         for proc in procs:
             if proc.stdout_stream:
@@ -150,12 +157,14 @@ def setup_redirect(proc_opts, key):
     if stream is None or stream is STDOUT or fileobj_has_fileno(stream):
         # no changes required
         return None, close
-    if key == 'stdin' and isinstance(stream, basestring):
-        try:
-            stream = stream.encode('utf-8')
-        except:
-            pass
-        stream = BytesIO(stream)
+    if key == 'stdin':
+        if isinstance(stream, basestring):
+            stream = BytesIO(to_cstr(stream))
+        if hasattr(stream, 'read'):
+            # replace with an iterator that yields data in up to 64k chunks.
+            # This is done to avoid the yield-by-line logic when iterating
+            # file-like objects that contain binary data.
+            stream = fileobj_to_iterator(stream)
     proc_opts[key] = PIPE
     return stream, close
 
@@ -170,6 +179,16 @@ def truncate(path):
 
 def append(path):
     return FileOpenWrapper('ab', path)
+
+
+def fileobj_to_iterator(fobj):
+    def iterator():
+        while True:
+            data = fobj.read(0xffff)
+            if not data:
+                break
+            yield data
+    return iterator()
 
 
 class FileOpenWrapper(object):
@@ -258,7 +277,7 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
         return Pipeline(self.commands + [other])
 
     def __ror__(self, other):
-        if hasattr(other, 'read') or isinstance(other, basestring) or (
+        if hasattr(other, '__iter__') or isinstance(other, basestring) or (
             isinstance(other, FileOpenWrapper) and other.mode == 'rb'):
             return Pipeline([self.commands[0]._redirect('stdin', other)] +
                             self.commands[1:])
