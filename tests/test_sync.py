@@ -121,3 +121,12 @@ def test_stdout_stderr_redirect_file():
 def test_iterator_input():
     assert str((n for n in [1, 2, 3, 4]) | cat) == '1234'
     assert str(['ab', 2, '\n', 5] | cat) == 'ab2\n5'
+
+
+def test_iterator_output():
+    chunks = []
+    for chunk in b'123\n' | errmd5 >> STDOUT | errmd5 >> STDOUT:
+        chunks.append(chunk)
+    assert b''.join(chunks) == (b'123\n'
+                                b'ba1f2511fc30423bdbb183fe33f3dd0f\n'
+                                b'ba5d6480bba42f55a708ac7096374f7a\n')
