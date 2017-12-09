@@ -6,25 +6,31 @@ import threading
 STDOUT = subprocess.STDOUT
 PIPE = subprocess.PIPE
 DEVNULL = object()
-
+MAX_CHUNK_SIZE = 0xffff
 
 # We have python2/3 compatibility, but don't want to rely on `six` package so
 # this script can be used independently.
 try:
-  basestring
-  import StringIO
-  BytesIO = StringIO.StringIO
-  to_cstr = str
-  PY3 = False
+    xrange
+    from Queue import Queue, Empty
+    import StringIO
+    BytesIO = StringIO.StringIO
+    def is_string(o):
+        return isinstance(o, basestring)
+    to_cstr = str
+    PY3 = False
 except NameError:
-  basestring = str
-  import io
-  BytesIO = io.BytesIO
-  def to_cstr(obj):
-      if isinstance(obj, bytes):
-          return obj
-      return str(obj).encode('utf-8')
-  PY3 = True
+    xrange = range
+    from queue import Queue, Empty
+    import io
+    BytesIO = io.BytesIO
+    def is_string(o):
+        return isinstance(o, str) or isinstance(o, bytes)
+    def to_cstr(obj):
+        if isinstance(obj, bytes):
+            return obj
+        return str(obj).encode('utf-8')
+    PY3 = True
 
 
 if sys.platform != 'win32':
@@ -49,7 +55,9 @@ class AlreadyRedirected(Exception):
 
 
 class ProcessError(Exception):
-    pass
+    def __init__(self, process_info):
+        super(ProcessError, self).__init__('One or more commands failed')
+        self.process_info = process_info
 
 
 def fileobj_has_fileno(fileobj):
@@ -78,73 +86,143 @@ def validate_pipeline(commands):
             raise InvalidPipeline(msg)
 
 
-def need_concurrent_wait(procs):
-    rv = 0
-    for proc in procs:
-        rv += proc.stream_count()
-    return rv > 1
-
-
 def wait(procs, throw_on_error):
-    if need_concurrent_wait(procs):
-        concurrent_wait(procs)
-    else:
-        simple_wait(procs)
-    rv = tuple(proc.wait() for proc in procs)
+    status_codes = []
+    result = tuple(iterate_outputs(procs, throw_on_error, status_codes))
+    assert result == ()
+    return tuple(status_codes)
+
+
+def iterate_outputs(procs, throw_on_error, status_codes):
+    read_streams = [proc.stderr_stream for proc in procs if proc.stderr]
+    if procs[-1].stdout:
+        read_streams.append(procs[-1].stdout_stream)
+    write_stream = procs[0].stdin_stream if procs[0].stdin else None
+    co = communicate(procs)
+    wchunk = None
+    while True:
+        try:
+            ri = co.send(wchunk)
+            if ri:
+                rchunk, i = ri
+                if read_streams[i]:
+                    read_streams[i].write(rchunk)
+                else:
+                    yield ri
+        except StopIteration:
+            break
+        try:
+            wchunk = next(write_stream) if write_stream else None
+        except StopIteration:
+            wchunk = None
+    status_codes += [proc.wait() for proc in procs]
     if throw_on_error and len(list(filter(lambda c: c != 0, rv))):
-        raise ProcessError('One or more commands failed')
-    return rv
+        process_info = [
+            (proc.args, proc.pid, proc.returncode) for proc in procs
+        ]
+        raise ProcessError(process_info)
 
 
-def concurrent_wait(procs):
+def write_chunk(proc, chunk):
+    try:
+        proc.stdin.write(to_cstr(chunk))
+    except IOError as e:
+        if e.errno == errno.EPIPE:
+            # communicate() should ignore broken pipe error
+            pass
+        elif (e.errno == errno.EINVAL and proc.poll() is not None):
+            # Issue #19612: stdin.write() fails with EINVAL
+            # if the process already exited before the write
+            pass
+        else:
+            raise
+
+
+def communicate(procs):
     # make a list of (readable streams, sinks) tuples
-    readers = [(proc.stderr, proc.stderr_stream) for proc in procs
-               if proc.stderr_stream]
-    if procs[-1].stdout_stream:
-        readers.append((procs[-1].stdout, procs[-1].stdout_stream))
-    concurrent_read_write(procs[0], readers)
+    read_streams = [proc.stderr for proc in procs if proc.stderr]
+    if procs[-1].stdout:
+        read_streams.append(procs[-1].stdout)
+    writer = procs[0]
+    if len(read_streams + [w for w in [writer] if w.stdin]) > 1:
+        return concurrent_communicate(writer, read_streams)
+    if writer.stdin or len(read_streams) == 1:
+        return simple_communicate(writer, read_streams)
+    else:
+        return stub_communicate()
 
 
-def concurrent_read_write(write_proc, readers):
+def stub_communicate():
+    return
+    yield
+
+
+def simple_communicate(proc, read_streams):
+    if proc.stdin:
+        while True:
+            chunk = yield
+            if not chunk:
+                break
+            write_chunk(proc, chunk)
+        proc.stdin.close()
+    else:
+        read_stream = read_streams[0]
+        while True:
+            chunk = read_stream.read(MAX_CHUNK_SIZE)
+            if not chunk:
+                break
+            yield (chunk, 0)
+
+
+def concurrent_communicate(proc, read_streams):
+    def read(queue, read_stream, index):
+        while True:
+            chunk = read_stream.read(MAX_CHUNK_SIZE)
+            if not chunk:
+                break
+            queue.put((chunk, index))
+        queue.put((None, index))
+
+    def write(queue, proc):
+        while True:
+            chunk = queue.get()
+            if not chunk:
+                break
+            write_chunk(proc, chunk)
+        proc.stdin.close()
+
+    rqueue = Queue(maxsize=1)
+    wqueue = Queue()
     threads = []
-    for read_stream, sink in readers:
-        threads.append(threading.Thread(
-            target=lambda r, s: s.write(r.read()),
-            args=(read_stream, sink)))
+    for i, rs in enumerate(read_streams):
+        threads.append(threading.Thread(target=read, args=(rqueue, rs, i)))
         threads[-1].setDaemon(True)
         threads[-1].start()
-    if write_proc.stdin:
-        try:
-            for chunk in write_proc.stdin_stream:
-                write_proc.stdin.write(to_cstr(chunk))
-        except IOError as e:
-            if e.errno == errno.EPIPE:
-                # communicate() should ignore broken pipe error
-                pass
-            elif (e.errno == errno.EINVAL and write_proc.poll() is not None):
-                # Issue #19612: stdin.write() fails with EINVAL
-                # if the process already exited before the write
-                pass
-            else:
-                raise
-        write_proc.stdin.close()
+    if proc.stdin:
+        threads.append(threading.Thread(target=write, args=(wqueue, proc)))
+        threads[-1].setDaemon(True)
+        threads[-1].start()
+
+    writing = True
+    reading = len(read_streams)
+    while writing or reading or rqueue.qsize():
+        if reading or rqueue.qsize():
+            try:
+                rchunk, index = rqueue.get(block=not writing)
+                if rchunk:
+                    wchunk = yield rchunk, index
+                else:
+                    reading -= 1
+                    continue
+            except Empty:
+                wchunk = yield
+        else:
+            wchunk = yield
+        if writing:
+            wqueue.put(wchunk)
+            writing = wchunk is not None
     for t in threads:
         t.join()
-
-
-def simple_wait(procs):
-    if procs[0].stdin_stream:
-        chunks = list(procs[0].stdin_stream)
-        procs[0].communicate(b''.join(chunks))
-    else:
-        for proc in procs:
-            if proc.stdout_stream:
-                proc.stdout_stream.write(proc.communicate()[0])
-            elif proc.stderr_stream:
-                proc.stderr_stream.write(proc.communicate()[1])
-            else:
-                continue
-            break
 
 
 def setup_redirect(proc_opts, key):
@@ -154,17 +232,19 @@ def setup_redirect(proc_opts, key):
         close = True
         stream = open(stream.path, stream.mode)
         proc_opts[key] = stream
-    if stream is None or stream is STDOUT or fileobj_has_fileno(stream):
+    if stream in (None, STDOUT, PIPE) or fileobj_has_fileno(stream):
         # no changes required
         return None, close
     if key == 'stdin':
-        if isinstance(stream, basestring):
+        if is_string(stream):
             stream = BytesIO(to_cstr(stream))
         if hasattr(stream, 'read'):
             # replace with an iterator that yields data in up to 64k chunks.
             # This is done to avoid the yield-by-line logic when iterating
             # file-like objects that contain binary data.
             stream = fileobj_to_iterator(stream)
+        elif hasattr(stream, '__iter__'):
+            stream = iter(stream)
     proc_opts[key] = PIPE
     return stream, close
 
@@ -184,7 +264,7 @@ def append(path):
 def fileobj_to_iterator(fobj):
     def iterator():
         while True:
-            data = fobj.read(0xffff)
+            data = fobj.read(MAX_CHUNK_SIZE)
             if not data:
                 break
             yield data
@@ -216,18 +296,15 @@ class RunningProcess(object):
     def stderr(self):
         return self.popen.stderr
 
-    def communicate(self, stdindata=None):
-        return self.popen.communicate(stdindata)
+    @property
+    def pid(self):
+        return self.popen.pid
 
     def wait(self):
         return self.popen.wait()
 
     def poll(self):
         return self.popen.poll()
-
-    def stream_count(self):
-        return sum(1 for _ in filter(
-            None, [self.stdin_stream, self.stdout_stream, self.stderr_stream]))
 
 
 class Shell(object):
@@ -277,14 +354,34 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
         return Pipeline(self.commands + [other])
 
     def __ror__(self, other):
-        if hasattr(other, '__iter__') or isinstance(other, basestring) or (
+        if hasattr(other, '__iter__') or is_string(other) or (
             isinstance(other, FileOpenWrapper) and other.mode == 'rb'):
             return Pipeline([self.commands[0]._redirect('stdin', other)] +
                             self.commands[1:])
         assert False, "Invalid"
 
     def __call__(self):
-        return self._spawn()
+        procs, throw_on_error = self._spawn()
+        return wait(procs, throw_on_error)
+
+    def __iter__(self):
+        pipeline = Pipeline(self.commands[:-1] +
+                            [self.commands[-1]._redirect('stdout', PIPE)])
+        procs, throw_on_error = pipeline._spawn()
+        pipe_count = sum(1 for proc in procs if proc.stderr)
+        if procs[-1].stdout:
+            pipe_count += 1
+        if not pipe_count:
+            wait(procs, throw_on_error)
+            # nothing to yield
+            return
+        if pipe_count == 1:
+            for rchunk, i in iterate_outputs(procs, throw_on_error, []):
+                yield rchunk
+        else:
+            for rchunk, i in iterate_outputs(procs, throw_on_error, []):
+                yield tuple(rchunk if i == index else None
+                            for index in xrange(pipe_count))
 
     def _collect_output(self):
         sink = BytesIO()
@@ -342,7 +439,7 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
                 # is connected to the current process's stdin
                 procs[-1].stdout.close()
             procs.append(current_proc)
-        return wait(procs, throw_on_error)
+        return procs, throw_on_error
 
 
 class Command(object):

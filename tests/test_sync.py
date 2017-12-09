@@ -1,4 +1,5 @@
 import sys
+import hashlib
 
 import six
 
@@ -130,3 +131,47 @@ def test_iterator_output():
     assert b''.join(chunks) == (b'123\n'
                                 b'ba1f2511fc30423bdbb183fe33f3dd0f\n'
                                 b'ba5d6480bba42f55a708ac7096374f7a\n')
+
+
+def test_iterator_output_multiple_pipes():
+    chunks = []
+    for chunk in b'123\n' | errmd5 >> PIPE | errmd5 >> PIPE:
+        chunks.append(chunk)
+    assert len(chunks) == 3
+    assert (b'ba1f2511fc30423bdbb183fe33f3dd0f\n', None, None) in chunks
+    assert (None, b'ba1f2511fc30423bdbb183fe33f3dd0f\n', None) in chunks
+    assert (None, None, b'123\n') in chunks
+
+
+def test_big_data():
+    def generator():
+        # generates a total of 32 MB, ensuring the OS buffers will be filled
+        b = (
+            b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+            * 16
+        )
+        i = 0
+        count = 1024 * 32
+        while i < count:
+            yield b
+            i += 1
+    md5 = hashlib.md5()
+    stderr_1 = None
+    stderr_2 = None
+    chunk_count = 0
+    for err1, err2, chunk in generator() | errmd5 >> PIPE | errmd5 >> PIPE:
+        chunk_count += 1
+        if err1:
+            assert stderr_1 is None
+            stderr_1 = err1
+        elif err2:
+            assert stderr_2 is None
+            stderr_2 = err2
+        else:
+            md5.update(chunk)
+    assert stderr_1 == b'80365aea26be3a31ce7f953d7b01ea0d\n'
+    assert stderr_2 == b'80365aea26be3a31ce7f953d7b01ea0d\n'
+    assert md5.hexdigest() == '80365aea26be3a31ce7f953d7b01ea0d'
+
+
+

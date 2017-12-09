@@ -22,6 +22,7 @@ def main():
     stdout.write(out.getvalue())
     stdout.flush()
     stderr.write(md5.hexdigest().encode() + b'\n')
+    stderr.flush()
 
 
 if __name__ == '__main__':
