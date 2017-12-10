@@ -1,6 +1,7 @@
+import collections
+import os
 import subprocess
 import sys
-import threading
 
 
 STDOUT = subprocess.STDOUT
@@ -33,17 +34,22 @@ except NameError:
     PY3 = True
 
 
-if sys.platform != 'win32':
+if sys.platform == 'win32':
+    import threading
+    def set_extra_popen_opts(opts):
+        pass
+    def concurrent_communicate(proc, read_streams):
+        return concurrent_communicate_with_threads(proc, read_streams)
+else:
+    import select
     from signal import signal, SIGPIPE, SIG_DFL
-
+    _PIPE_BUF = getattr(select, 'PIPE_BUF', 512)
     def set_extra_popen_opts(opts):
         # Restore SIGPIPE default handler when forked. This is required for
         # handling pipelines correctly.
         opts['preexec_fn'] = lambda: signal(SIGPIPE, SIG_DFL)
-
-else:
-    def set_extra_popen_opts(opts):
-        pass
+    def concurrent_communicate(proc, read_streams):
+        return concurrent_communicate_with_select(proc, read_streams)
 
 
 class InvalidPipeline(Exception):
@@ -174,7 +180,60 @@ def simple_communicate(proc, read_streams):
             yield (chunk, 0)
 
 
-def concurrent_communicate(proc, read_streams):
+def concurrent_communicate_with_select(proc, read_streams):
+    reading = [] + read_streams
+    writing = [proc.stdin] if proc.stdin else []
+    indexes = dict((r.fileno(), i) for i, r in enumerate(read_streams))
+    write_queue = collections.deque()
+
+    while reading or writing:
+        try:
+            rlist, wlist, xlist = select.select(reading, writing, [])
+        except select.error as e:
+            if e.args[0] == errno.EINTR:
+                continue
+            raise
+
+        for rstream in rlist:
+            rchunk = os.read(rstream.fileno(), MAX_CHUNK_SIZE)
+            if not rchunk:
+                rstream.close()
+                reading.remove(rstream)
+                continue
+            write_queue.append((yield rchunk, indexes[rstream.fileno()]))
+
+        if not write_queue:
+            write_queue.append((yield))
+
+        if not wlist:
+            continue
+
+        while write_queue:
+            wchunk = write_queue.popleft()
+            if wchunk is None:
+                assert not write_queue
+                writing = []
+                proc.stdin.close()
+                break
+            wchunk = to_cstr(wchunk)
+            chunk = wchunk[:_PIPE_BUF]
+            if len(wchunk) > _PIPE_BUF:
+                write_queue.appendleft(wchunk[_PIPE_BUF:])
+            try:
+                written = os.write(proc.stdin.fileno(), chunk)
+            except OSError as e:
+                if e.errno != errno.EPIPE:
+                    raise
+                writing = []
+                proc.stdin.close()
+            else:
+                if len(chunk) > written:
+                    write_queue.appendleft(chunk[written:])
+                    # break so we wait for the pipe buffer to be drained
+                    break
+
+
+def concurrent_communicate_with_threads(proc, read_streams):
     def read(queue, read_stream, index):
         while True:
             chunk = read_stream.read(MAX_CHUNK_SIZE)
