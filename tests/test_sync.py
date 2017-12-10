@@ -2,6 +2,7 @@ import sys
 import hashlib
 
 import six
+import pytest
 
 from helper import *
 from ush import read, truncate, append
@@ -143,18 +144,18 @@ def test_iterator_output_multiple_pipes():
     assert (None, None, b'123\n') in chunks
 
 
-def test_big_data():
+@pytest.mark.parametrize('chunk_factor', [16, 32, 64, 128, 256])
+def test_big_data(chunk_factor):
     def generator():
-        # generates a total of 32 MB, ensuring the OS buffers will be filled
         b = (
             b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-            * 16
+            * chunk_factor
         )
-        i = 0
-        count = 1024 * 32
-        while i < count:
+        sent = 0
+        total = 32 * 1024 * 1024
+        while sent < total:
             yield b
-            i += 1
+            sent += len(b)
     md5 = hashlib.md5()
     stderr_1 = None
     stderr_2 = None
