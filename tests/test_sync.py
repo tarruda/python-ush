@@ -94,8 +94,11 @@ def test_stderr_redirect_to_stdout():
                                b'ba5d6480bba42f55a708ac7096374f7a\n')
 
 
-
 def test_string_input_output():
+    assert str(repeat('-c', '5', '123')) == '123123123123123'
+    assert bytes(repeat('-c', '5', '123')) == b'123123123123123'
+    if six.PY2:
+        assert unicode(repeat('-c', '5', '123')) == u'123123123123123'
     assert str('abc\ndef' | cat) == 'abc\ndef'
     assert bytes('abc\ndef' | cat) == b'abc\ndef'
     if six.PY2:
@@ -126,6 +129,10 @@ def test_iterator_input():
 
 
 def test_iterator_output():
+    chunks = []
+    for chunk in repeat('-c', '5', '123'):
+        chunks.append(chunk)
+    assert b''.join(chunks) == b'123123123123123'
     chunks = []
     for chunk in b'123\n' | errmd5 >> STDOUT | errmd5 >> STDOUT:
         chunks.append(chunk)

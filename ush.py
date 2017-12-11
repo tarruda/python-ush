@@ -399,7 +399,7 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
         self.commands = commands
 
     def __repr__(self):
-        return ' | '.join((str(c) for c in self.commands))
+        return ' | '.join((repr(c) for c in self.commands))
 
     def __or__(self, other):
         if isinstance(other, Shell):
@@ -521,7 +521,7 @@ class Command(object):
                 new_opts[key] = opts[key]
         return Command(self.argv + argv, new_opts)
 
-    def __str__(self):
+    def __repr__(self):
         argstr = ' '.join(self.argv)
         optstr = ' '.join(
             '{0}="{1}"'.format(key, getattr(self, key))
@@ -531,6 +531,18 @@ class Command(object):
             return '{0} ({1})'.format(argstr, optstr)
         else:
             return argstr
+
+    def __str__(self):
+        return str(Pipeline([self]))
+
+    def __bytes__(self):
+        return bytes(Pipeline([self]))
+
+    def __unicode__(self):
+        return unicode(Pipeline([self]))
+
+    def __iter__(self):
+        return iter(Pipeline([self]))
 
     def __or__(self, other):
         return Pipeline([self]) | other
