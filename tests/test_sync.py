@@ -1,5 +1,7 @@
-import sys
 import hashlib
+import os
+import sys
+import time
 
 import six
 import pytest
@@ -9,6 +11,14 @@ from ush import read, truncate, append
 
 
 repeat_hex = repeat('-c', '100', '0123456789abcdef')
+
+
+def s(s):
+    """Helper to normalize linefeeds."""
+    if isinstance(s, bytes):
+        return s.replace(b'\n', os.linesep.encode())
+    else:
+        return s.replace('\n', os.linesep)
 
 
 def test_simple_success():
@@ -22,18 +32,18 @@ def test_simple_failure():
 def test_redirect_stdout():
     sink = six.BytesIO()
     assert (cat('.textfile') | sink)() == (0,)
-    assert sink.getvalue() == b'123\n1234\n12345\n'
+    assert sink.getvalue() == s(b'123\n1234\n12345\n')
 
 
 def test_redirect_stdin():
     source = six.BytesIO()
-    source.write(b'abc\ndef')
+    source.write(s(b'abc\ndef'))
     assert (source | cat)() == (0,)
 
 
 def test_redirect_stdout_and_stdin():
     source = six.BytesIO()
-    source.write(b'abc\ndef')
+    source.write(s(b'abc\ndef'))
     source.seek(0)
     sink = six.BytesIO()
     assert (source | cat | sink)() == (0,)
@@ -45,7 +55,8 @@ def test_one_pipe():
     assert (repeat_hex | sha256sum | sink)() == (0, 0,)
     assert (
         sink.getvalue() ==
-        b'1f1a5c83e53c9faa87badd5d17c45ffec49b137430c9817dd5c9420fd96aaa3e\n')
+        s(b'1f1a5c83e53c9faa87badd5d17c45ffec'
+          b'49b137430c9817dd5c9420fd96aaa3e\n'))
 
 
 def test_two_pipes():
@@ -53,17 +64,17 @@ def test_two_pipes():
     assert (repeat_hex | sha256sum | fold('-w', 16) | sink)() == (0, 0, 0,)
     assert (
         sink.getvalue() ==
-        (b'1f1a5c83e53c9faa\n'
-         b'87badd5d17c45ffe\n'
-         b'c49b137430c9817d\n'
-         b'd5c9420fd96aaa3e\n'))
+        s(b'1f1a5c83e53c9faa\n'
+          b'87badd5d17c45ffe\n'
+          b'c49b137430c9817d\n'
+          b'd5c9420fd96aaa3e\n'))
 
 
 def test_three_pipes():
     sink = six.BytesIO()
     assert (repeat_hex | sha256sum | fold('-w', 16) | head('-c', 18) |
             sink)() == (0, 0, 0, 0,)
-    assert sink.getvalue() == b'1f1a5c83e53c9faa\n8'
+    assert sink.getvalue() == s(b'1f1a5c83e53c9faa\n8')
 
 
 def test_stderr_redirect():
@@ -74,24 +85,25 @@ def test_stderr_redirect():
     source.seek(0)
     assert (source | errmd5 >> stderr_sink | errmd5 >> stderr_sink |
             sink)() == (0, 0)
-    assert stderr_sink.getvalue() == b'ba1f2511fc30423bdbb183fe33f3dd0f\n' * 2
-    assert sink.getvalue() == b'123\n'
+    assert stderr_sink.getvalue() == (
+        s(b'ba1f2511fc30423bdbb183fe33f3dd0f\n') * 2)
+    assert sink.getvalue() == s(b'123\n')
 
 
 def test_stderr_redirect_to_stdout():
     sink = six.BytesIO()
     source = six.BytesIO()
-    source.write(b'123\n')
+    source.write(s(b'123\n'))
     source.seek(0)
     assert (source | errmd5 >> STDOUT | errmd5 | sink)() == (0, 0)
-    assert sink.getvalue() == (b'123\n'
-                               b'ba1f2511fc30423bdbb183fe33f3dd0f\n')
+    assert sink.getvalue() == s(b'123\n'
+                                b'ba1f2511fc30423bdbb183fe33f3dd0f\n')
     source.seek(0)
     sink.seek(0)
     assert (source | errmd5 >> STDOUT | errmd5 >> STDOUT | sink)() == (0, 0)
-    assert sink.getvalue() == (b'123\n'
-                               b'ba1f2511fc30423bdbb183fe33f3dd0f\n'
-                               b'ba5d6480bba42f55a708ac7096374f7a\n')
+    assert sink.getvalue() == s(b'123\n'
+                                b'ba1f2511fc30423bdbb183fe33f3dd0f\n'
+                                b'ba5d6480bba42f55a708ac7096374f7a\n')
 
 
 def test_string_input_output():
@@ -99,14 +111,14 @@ def test_string_input_output():
     assert bytes(repeat('-c', '5', '123')) == b'123123123123123'
     if six.PY2:
         assert unicode(repeat('-c', '5', '123')) == u'123123123123123'
-    assert str('abc\ndef' | cat) == 'abc\ndef'
-    assert bytes('abc\ndef' | cat) == b'abc\ndef'
+    assert str(s('abc\ndef') | cat) == s('abc\ndef')
+    assert bytes(s('abc\ndef') | cat) == s(b'abc\ndef')
     if six.PY2:
-        assert unicode('abc\ndef' | cat) == u'abc\ndef'
+        assert unicode(s('abc\ndef') | cat) == s(u'abc\ndef')
 
 
 def test_stdin_redirect_file():
-    assert str(read('.textfile') | cat) == '123\n1234\n12345\n'
+    assert str(read('.textfile') | cat) == s('123\n1234\n12345\n')
 
 
 def test_stdout_stderr_redirect_file():
@@ -114,18 +126,18 @@ def test_stdout_stderr_redirect_file():
     with open('.stdout', 'rb') as f:
         assert f.read() == b'hello'
     with open('.stderr', 'rb') as f:
-        assert f.read() == b'5d41402abc4b2a76b9719d911017c592\n'
-    ('\nworld\n' | errmd5 >> append('.stderr') | append('.stdout'))()
+        assert f.read() == s(b'5d41402abc4b2a76b9719d911017c592\n')
+    (s('\nworld\n') | errmd5 >> append('.stderr') | append('.stdout'))()
     with open('.stdout', 'rb') as f:
-        assert f.read() == b'hello\nworld\n'
+        assert f.read() == s(b'hello\nworld\n')
     with open('.stderr', 'rb') as f:
-        assert f.read() == (b'5d41402abc4b2a76b9719d911017c592\n'
-                            b'81f82f69f5be2752005dae73e0f22f76\n')
+        assert f.read() == s(b'5d41402abc4b2a76b9719d911017c592\n'
+                             b'81f82f69f5be2752005dae73e0f22f76\n')
 
 
 def test_iterator_input():
     assert str((n for n in [1, 2, 3, 4]) | cat) == '1234'
-    assert str(['ab', 2, '\n', 5] | cat) == 'ab2\n5'
+    assert str(['ab', 2, s('\n'), 5] | cat) == s('ab2\n5')
 
 
 def test_iterator_output():
@@ -134,21 +146,21 @@ def test_iterator_output():
         chunks.append(chunk)
     assert b''.join(chunks) == b'123123123123123'
     chunks = []
-    for chunk in b'123\n' | errmd5 >> STDOUT | errmd5 >> STDOUT:
+    for chunk in s(b'123\n') | errmd5 >> STDOUT | errmd5 >> STDOUT:
         chunks.append(chunk)
-    assert b''.join(chunks) == (b'123\n'
-                                b'ba1f2511fc30423bdbb183fe33f3dd0f\n'
-                                b'ba5d6480bba42f55a708ac7096374f7a\n')
+    assert b''.join(chunks) == s(b'123\n'
+                                 b'ba1f2511fc30423bdbb183fe33f3dd0f\n'
+                                 b'ba5d6480bba42f55a708ac7096374f7a\n')
 
 
 def test_iterator_output_multiple_pipes():
     chunks = []
-    for chunk in b'123\n' | errmd5 >> PIPE | errmd5 >> PIPE:
+    for chunk in s(b'123\n') | errmd5 >> PIPE | errmd5 >> PIPE:
         chunks.append(chunk)
     assert len(chunks) == 3
-    assert (b'ba1f2511fc30423bdbb183fe33f3dd0f\n', None, None) in chunks
-    assert (None, b'ba1f2511fc30423bdbb183fe33f3dd0f\n', None) in chunks
-    assert (None, None, b'123\n') in chunks
+    assert (s(b'ba1f2511fc30423bdbb183fe33f3dd0f\n'), None, None) in chunks
+    assert (None, s(b'ba1f2511fc30423bdbb183fe33f3dd0f\n'), None) in chunks
+    assert (None, None, s(b'123\n')) in chunks
 
 
 @pytest.mark.parametrize('chunk_factor', [16, 32, 64, 128, 256])
@@ -177,8 +189,8 @@ def test_big_data(chunk_factor):
             stderr_2 = err2
         else:
             md5.update(chunk)
-    assert stderr_1 == b'80365aea26be3a31ce7f953d7b01ea0d\n'
-    assert stderr_2 == b'80365aea26be3a31ce7f953d7b01ea0d\n'
+    assert stderr_1 == s(b'80365aea26be3a31ce7f953d7b01ea0d\n')
+    assert stderr_2 == s(b'80365aea26be3a31ce7f953d7b01ea0d\n')
     assert md5.hexdigest() == '80365aea26be3a31ce7f953d7b01ea0d'
 
 
