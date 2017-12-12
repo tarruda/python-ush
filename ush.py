@@ -74,6 +74,25 @@ def fileobj_has_fileno(fileobj):
         return False
 
 
+def iterate_lines(chunk_iterator):
+    remaining = {}
+    for chunk, stream_id in chunk_iterator:
+        chunk = remaining.get(stream_id, '') + chunk.decode('utf-8')
+        last_lf_index = -1
+        while True:
+            start = last_lf_index + 1
+            try:
+                lf_index = chunk.index('\n', start)
+            except ValueError:
+                remaining[stream_id] = chunk[last_lf_index + 1:]
+                break
+            yield chunk[start:lf_index], stream_id
+            remaining[stream_id] = chunk[lf_index + 1:]
+            last_lf_index = lf_index
+    for stream_id in remaining:
+        yield remaining[stream_id], stream_id
+
+
 def validate_pipeline(commands):
     for index, command in enumerate(commands):
         is_first = index == 0
