@@ -289,7 +289,11 @@ def setup_redirect(proc_opts, key):
     stream = proc_opts.get(key, None)
     if isinstance(stream, FileOpenWrapper):
         close = True
-        stream = open(stream.path, stream.mode)
+        fobj = open(stream.path, stream.mode)
+        if stream.mode == 'ab':
+            # On MS Windows we need to explicitly the file position to the end
+            fobj.seek(0, os.SEEK_END)
+        stream = fobj
         proc_opts[key] = stream
     if stream in (None, STDOUT, PIPE) or fileobj_has_fileno(stream):
         # no changes required
