@@ -447,6 +447,9 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
         return wait(procs, throw_on_error)
 
     def __iter__(self):
+        return self._iter(False)
+
+    def _iter(self, raw):
         pipeline = Pipeline(self.commands[:-1] +
                             [self.commands[-1]._redirect('stdout', PIPE)])
         procs, throw_on_error = pipeline._spawn()
@@ -457,12 +460,15 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
             wait(procs, throw_on_error)
             # nothing to yield
             return
+        iterator = iterate_outputs(procs, throw_on_error, [])
+        if not raw:
+            iterator = iterate_lines(iterator)
         if pipe_count == 1:
-            for rchunk, i in iterate_outputs(procs, throw_on_error, []):
-                yield rchunk
+            for line, stream_index in iterator:
+                yield line
         else:
-            for rchunk, i in iterate_outputs(procs, throw_on_error, []):
-                yield tuple(rchunk if i == index else None
+            for line, stream_index in iterator:
+                yield tuple(line if stream_index == index else None
                             for index in xrange(pipe_count))
 
     def _collect_output(self):
@@ -522,6 +528,9 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
                 procs[-1].stdout.close()
             procs.append(current_proc)
         return procs, throw_on_error
+
+    def iter_raw(self):
+        return self._iter(True)
 
 
 class Command(object):

@@ -144,23 +144,26 @@ def test_iterator_output():
     chunks = []
     for chunk in repeat('-c', '5', '123'):
         chunks.append(chunk)
-    assert b''.join(chunks) == b'123123123123123'
+    assert chunks == ['123123123123123']
     chunks = []
     for chunk in s(b'123\n') | errmd5 >> STDOUT | errmd5 >> STDOUT:
         chunks.append(chunk)
-    assert b''.join(chunks) == s(b'123\n'
-                                 b'ba1f2511fc30423bdbb183fe33f3dd0f\n'
-                                 b'ba5d6480bba42f55a708ac7096374f7a\n')
+    assert chunks == [
+        '123',
+        'ba1f2511fc30423bdbb183fe33f3dd0f',
+        'ba5d6480bba42f55a708ac7096374f7a',
+        ''
+    ]
 
 
 def test_iterator_output_multiple_pipes():
     chunks = []
     for chunk in s(b'123\n') | errmd5 >> PIPE | errmd5 >> PIPE:
         chunks.append(chunk)
-    assert len(chunks) == 3
-    assert (s(b'ba1f2511fc30423bdbb183fe33f3dd0f\n'), None, None) in chunks
-    assert (None, s(b'ba1f2511fc30423bdbb183fe33f3dd0f\n'), None) in chunks
-    assert (None, None, s(b'123\n')) in chunks
+    assert len(chunks) == 6
+    assert (s('ba1f2511fc30423bdbb183fe33f3dd0f'), None, None) in chunks
+    assert (None, s('ba1f2511fc30423bdbb183fe33f3dd0f'), None) in chunks
+    assert (None, None, s('123')) in chunks
 
 
 @pytest.mark.parametrize('chunk_factor', [16, 32, 64, 128, 256])
@@ -179,12 +182,13 @@ def test_big_data(chunk_factor):
     stderr_1 = None
     stderr_2 = None
     chunk_count = 0
-    for err1, err2, chunk in generator() | errmd5 >> PIPE | errmd5 >> PIPE:
+    for err1, err2, chunk in (
+        generator() | errmd5 >> PIPE | errmd5 >> PIPE).iter_raw():
         chunk_count += 1
-        if err1:
+        if err1 is not None:
             assert stderr_1 is None
             stderr_1 = err1
-        elif err2:
+        elif err2 is not None:
             assert stderr_2 is None
             stderr_2 = err2
         else:
