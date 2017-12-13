@@ -7,7 +7,7 @@ from compat import stdin, stdout
 def parse_argv():
     parser = argparse.ArgumentParser('concatenate files to stdout')
     parser.add_argument('files', type=argparse.FileType('rb'), nargs='*',
-                                 default=[stdin])
+                        default=[stdin])
     return parser.parse_args()
 
 

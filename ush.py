@@ -1,4 +1,5 @@
 import collections
+import errno
 import os
 import subprocess
 import sys
@@ -91,7 +92,7 @@ def iterate_lines(chunk_iterator, trim_trailing_lf=False):
             last_lf_index = lf_index
     for stream_id in remaining:
         line = remaining[stream_id]
-        if line or not trim_trailing_lf:  
+        if line or not trim_trailing_lf:
             yield line, stream_id
 
 
@@ -143,7 +144,7 @@ def iterate_outputs(procs, throw_on_error, status_codes):
         except StopIteration:
             wchunk = None
     status_codes += [proc.wait() for proc in procs]
-    if throw_on_error and len(list(filter(lambda c: c != 0, rv))):
+    if throw_on_error and len(list(filter(lambda c: c != 0))):
         process_info = [
             (proc.args, proc.pid, proc.returncode) for proc in procs
         ]
@@ -430,7 +431,7 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
         if isinstance(other, Shell):
             return other(self)
         elif hasattr(other, 'write') or (
-            isinstance(other, FileOpenWrapper) and other.mode in ['wb', 'ab']):
+          isinstance(other, FileOpenWrapper) and other.mode in ['wb', 'ab']):
             # assume file-like obj
             return Pipeline(self.commands[:-1] +
                             [self.commands[-1]._redirect('stdout', other)])
@@ -439,7 +440,7 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
 
     def __ror__(self, other):
         if hasattr(other, '__iter__') or is_string(other) or (
-            isinstance(other, FileOpenWrapper) and other.mode == 'rb'):
+          isinstance(other, FileOpenWrapper) and other.mode == 'rb'):
             return Pipeline([self.commands[0]._redirect('stdin', other)] +
                             self.commands[1:])
         assert False, "Invalid"

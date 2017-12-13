@@ -10,8 +10,10 @@ def chunk_iterator(data, chunk_size):
 
 
 DATA = b'Lorem \nipsum dolor \nsit amet\n'
+
+
 @pytest.mark.parametrize('chunk_size', list(range(1, len(DATA))))
 def test_iterate_lines(chunk_size):
     lines = [l for l, i in iterate_lines(chunk_iterator(DATA, chunk_size))]
-    assert lines ==  ['Lorem ', 'ipsum dolor ', 'sit amet', '' ]
+    assert lines == ['Lorem ', 'ipsum dolor ', 'sit amet', '']
 

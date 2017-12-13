@@ -8,5 +8,3 @@ else:
     stdin = sys.stdin
     stdout = sys.stdout
     stderr = sys.stderr
-
-

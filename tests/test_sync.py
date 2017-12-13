@@ -1,7 +1,5 @@
 import hashlib
 import os
-import sys
-import time
 
 import six
 import pytest
@@ -182,7 +180,7 @@ def test_big_data(chunk_factor):
     stderr_2 = None
     chunk_count = 0
     for err1, err2, chunk in (
-        generator() | errmd5 >> PIPE | errmd5 >> PIPE).iter_raw():
+      generator() | errmd5 >> PIPE | errmd5 >> PIPE).iter_raw():
         chunk_count += 1
         if err1 is not None:
             assert stderr_1 is None
@@ -195,6 +193,3 @@ def test_big_data(chunk_factor):
     assert stderr_1 == s(b'80365aea26be3a31ce7f953d7b01ea0d\n')
     assert stderr_2 == s(b'80365aea26be3a31ce7f953d7b01ea0d\n')
     assert md5.hexdigest() == '80365aea26be3a31ce7f953d7b01ea0d'
-
-
-

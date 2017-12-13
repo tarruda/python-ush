@@ -3,7 +3,7 @@ import sys
 import ush
 
 __all__ = ('cat', 'fold', 'head', 'repeat', 'sha256sum', 'errmd5', 'STDOUT',
-          'PIPE')
+           'PIPE')
 
 SOURCE_ROOT = os.path.join(os.path.abspath(os.path.dirname(__file__)))
 TEST_BIN_DIR = os.path.join(SOURCE_ROOT, 'bin')
