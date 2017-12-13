@@ -152,7 +152,6 @@ def test_iterator_output():
         '123',
         'ba1f2511fc30423bdbb183fe33f3dd0f',
         'ba5d6480bba42f55a708ac7096374f7a',
-        ''
     ]
 
 
@@ -160,7 +159,7 @@ def test_iterator_output_multiple_pipes():
     chunks = []
     for chunk in s(b'123\n') | errmd5 >> PIPE | errmd5 >> PIPE:
         chunks.append(chunk)
-    assert len(chunks) == 6
+    assert len(chunks) == 3
     assert (s('ba1f2511fc30423bdbb183fe33f3dd0f'), None, None) in chunks
     assert (None, s('ba1f2511fc30423bdbb183fe33f3dd0f'), None) in chunks
     assert (None, None, s('123')) in chunks

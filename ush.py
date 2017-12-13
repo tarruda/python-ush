@@ -74,7 +74,7 @@ def fileobj_has_fileno(fileobj):
         return False
 
 
-def iterate_lines(chunk_iterator):
+def iterate_lines(chunk_iterator, trim_trailing_lf=False):
     remaining = {}
     for chunk, stream_id in chunk_iterator:
         chunk = remaining.get(stream_id, '') + chunk.decode('utf-8')
@@ -90,7 +90,9 @@ def iterate_lines(chunk_iterator):
             remaining[stream_id] = chunk[lf_index + 1:]
             last_lf_index = lf_index
     for stream_id in remaining:
-        yield remaining[stream_id], stream_id
+        line = remaining[stream_id]
+        if line or not trim_trailing_lf:  
+            yield line, stream_id
 
 
 def validate_pipeline(commands):
@@ -462,7 +464,7 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
             return
         iterator = iterate_outputs(procs, throw_on_error, [])
         if not raw:
-            iterator = iterate_lines(iterator)
+            iterator = iterate_lines(iterator, trim_trailing_lf=True)
         if pipe_count == 1:
             for line, stream_index in iterator:
                 yield line
