@@ -92,11 +92,16 @@ hold default options for commands created by it:
 
 >>> sh = Shell(raise_on_error=True)
 >>> sort, cat, echo = sh(['sort', '--reverse'], 'cat', 'echo')
+>>> sort
+sort --reverse (raise_on_error=True)
 
-The `sort`, `cat` and `echo` instances all have `raise_on_error=True` set. It is
-possible to override when calling the `Shell` object:
+It is possible to override when calling the `Shell` object:
 
->>> sort = sh(['sort', '--reverse'], cwd='bin', raise_on_error=False)
+>>> sort = sh(['sort', '--reverse'], cwd='bin', raise_on_error=None)
+>>> sort
+sort --reverse (cwd=bin)
+
+>>> sort = sort(cwd=None)
 
 Pipelines
 ---------

@@ -563,8 +563,8 @@ class Command(object):
     def __repr__(self):
         argstr = ' '.join(self.argv)
         optstr = ' '.join(
-            '{0}="{1}"'.format(key, getattr(self, key))
-            for key in Command.OPTS if getattr(self, key, None) is not None
+            '{}={}'.format(key, self.opts.get(key))
+            for key in self.opts if self.opts.get(key, None) is not None
             )
         if optstr:
             return '{0} ({1})'.format(argstr, optstr)
