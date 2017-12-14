@@ -1,0 +1,12 @@
+build: off
+deploy: off
+clone_depth: 1
+
+install:
+  - "python --version"
+  - "python -c \"import struct; print(struct.calcsize('P') * 8)\""
+  - "pip install --disable-pip-version-check --user --upgrade pip"
+  - "pip install -r dev-requirements.txt"
+
+test_script:
+  - "pytest --doctest-glob=*.txt"

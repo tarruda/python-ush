@@ -34,14 +34,14 @@ Adding arguments actually creates new `Command` instances with the appended
 arguments. If the same arguments are to be used in future invocations, it can be
 useful to save to a variable:
 
->>> ls = ls('--hide=__pycache__', '--hide=*.py*')
+>>> ls = ls('--hide=__pycache__', '--hide=*.py*', '--hide=*.yml', '--hide=*.txt')
 
 By default, standard input, output and error are inherited from the python
 process. To capture output, simply call `str()` or `unicode()` on the `Command`
 object:
 
 >>> str(ls)
-'bin\nLICENSE.txt\npytest.ini\nREADME.rst\nsetup.cfg\ntests\n'
+'bin\npytest.ini\nREADME.rst\nsetup.cfg\ntests\n'
 
 `Command` instances are also iterable, which is useful to process commands that
 output a lot of data without consuming everything in memory. By default, the
@@ -52,13 +52,13 @@ iterator treats the command output as utf-8 and yields one item per line:
 ...     files.append(line)
 ...
 >>> files
-[u'bin', u'LICENSE.txt', u'pytest.ini', u'README.rst', u'setup.cfg', u'tests']
+[u'bin', u'pytest.ini', u'README.rst', u'setup.cfg', u'tests']
 
 It is possible to iterate on raw chunks of data (as received from the command)
 by calling the `iter_raw()` method.
 
 >>> list(ls.iter_raw())
-[b'bin\nLICENSE.txt\npytest.ini\nREADME.rst\nsetup.cfg\ntests\n']
+[b'bin\npytest.ini\nREADME.rst\nsetup.cfg\ntests\n']
 
 The normal behavior of invoking commands is return the exit code, even if it is
 an error:
@@ -110,7 +110,7 @@ Like with unix shells, it is possible to chain commands via the pipe (`|`)
 operator:
 
 >>> ls | sort
-ls --hide=__pycache__ --hide=*.py* | sort --reverse
+ls --hide=__pycache__ --hide=*.py* --hide=*.yml --hide=*.txt | sort --reverse
 
 Everything that can be done with single commands, can also be done with
 pipelines:
@@ -118,9 +118,9 @@ pipelines:
 >>> (ls | sort)()
 (0, 0)
 >>> str(ls | sort)
-'tests\nsetup.cfg\nREADME.rst\npytest.ini\nLICENSE.txt\nbin\n'
+'tests\nsetup.cfg\nREADME.rst\npytest.ini\nbin\n'
 >>> list(ls | sort)
-[u'tests', u'setup.cfg', u'README.rst', u'pytest.ini', u'LICENSE.txt', u'bin']
+[u'tests', u'setup.cfg', u'README.rst', u'pytest.ini', u'bin']
 
 Redirection
 -----------
@@ -131,7 +131,7 @@ chained with filenames instead of other `Command` instances:
 >>> (ls | sort | '.stdout')()
 (0, 0)
 >>> str(cat('.stdout'))
-'tests\nsetup.cfg\nREADME.rst\npytest.ini\nLICENSE.txt\nbin\n'
+'tests\nsetup.cfg\nREADME.rst\npytest.ini\nbin\n'
 >>> str('setup.cfg' | cat)
 '[metadata]\ndescription-file = README.rst\n'
 
@@ -144,7 +144,7 @@ file, add the `+` suffix to the filename, For example:
 >>> (echo('some more data') | cat | '.stdout+')()
 (0, 0)
 >>> str(cat('.stdout'))
-'tests\nsetup.cfg\nREADME.rst\npytest.ini\nLICENSE.txt\nbin\nsome more data\n'
+'tests\nsetup.cfg\nREADME.rst\npytest.ini\nbin\nsome more data\n'
 
 While only the first and last command of a pipeline may redirect stdin/stdout,
 any command in a pipeline may redirect stderr through the `stderr` option: 
