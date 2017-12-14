@@ -1,11 +1,10 @@
 import hashlib
 import os
 
-import six
 import pytest
+from six import BytesIO, StringIO, PY2
 
 from helper import *
-from ush import read, truncate, append
 
 
 repeat_hex = repeat('-c', '100', '0123456789abcdef')
@@ -28,28 +27,28 @@ def test_simple_failure():
 
 
 def test_redirect_stdout():
-    sink = six.BytesIO()
+    sink = BytesIO()
     assert (cat('.textfile') | sink)() == (0,)
     assert sink.getvalue() == s(b'123\n1234\n12345\n')
 
 
 def test_redirect_stdin():
-    source = six.BytesIO()
+    source = BytesIO()
     source.write(s(b'abc\ndef'))
     assert (source | cat)() == (0,)
 
 
 def test_redirect_stdout_and_stdin():
-    source = six.BytesIO()
+    source = BytesIO()
     source.write(s(b'abc\ndef'))
     source.seek(0)
-    sink = six.BytesIO()
+    sink = BytesIO()
     assert (source | cat | sink)() == (0,)
     assert sink.getvalue() == source.getvalue()
 
 
 def test_one_pipe():
-    sink = six.BytesIO()
+    sink = BytesIO()
     assert (repeat_hex | sha256sum | sink)() == (0, 0,)
     assert (
         sink.getvalue() ==
@@ -58,7 +57,7 @@ def test_one_pipe():
 
 
 def test_two_pipes():
-    sink = six.BytesIO()
+    sink = BytesIO()
     assert (repeat_hex | sha256sum | fold('-w', 16) | sink)() == (0, 0, 0,)
     assert (
         sink.getvalue() ==
@@ -69,16 +68,16 @@ def test_two_pipes():
 
 
 def test_three_pipes():
-    sink = six.BytesIO()
+    sink = BytesIO()
     assert (repeat_hex | sha256sum | fold('-w', 16) | head('-c', 18) |
             sink)() == (0, 0, 0, 0,)
     assert sink.getvalue() == s(b'1f1a5c83e53c9faa\n8')
 
 
 def test_stderr_redirect():
-    stderr_sink = six.BytesIO()
-    sink = six.BytesIO()
-    source = six.BytesIO()
+    stderr_sink = BytesIO()
+    sink = BytesIO()
+    source = BytesIO()
     source.write(b'123\n')
     source.seek(0)
     assert (source | errmd5 >> stderr_sink | errmd5 >> stderr_sink |
@@ -89,8 +88,8 @@ def test_stderr_redirect():
 
 
 def test_stderr_redirect_to_stdout():
-    sink = six.BytesIO()
-    source = six.BytesIO()
+    sink = BytesIO()
+    source = BytesIO()
     source.write(s(b'123\n'))
     source.seek(0)
     assert (source | errmd5 >> STDOUT | errmd5 | sink)() == (0, 0)
@@ -107,25 +106,25 @@ def test_stderr_redirect_to_stdout():
 def test_string_input_output():
     assert str(repeat('-c', '5', '123')) == '123123123123123'
     assert bytes(repeat('-c', '5', '123')) == b'123123123123123'
-    if six.PY2:
+    if PY2:
         assert unicode(repeat('-c', '5', '123')) == u'123123123123123'
-    assert str(s('abc\ndef') | cat) == s('abc\ndef')
-    assert bytes(s('abc\ndef') | cat) == s(b'abc\ndef')
-    if six.PY2:
-        assert unicode(s('abc\ndef') | cat) == s(u'abc\ndef')
+    assert str(StringIO(s('abc\ndef')) | cat) == s('abc\ndef')
+    assert bytes(StringIO(s('abc\ndef')) | cat) == s(b'abc\ndef')
+    if PY2:
+        assert unicode(StringIO(s('abc\ndef')) | cat) == s(u'abc\ndef')
 
 
 def test_stdin_redirect_file():
-    assert str(read('.textfile') | cat) == s('123\n1234\n12345\n')
+    assert str('.textfile' | cat) == s('123\n1234\n12345\n')
 
 
 def test_stdout_stderr_redirect_file():
-    ('hello' | errmd5 >> truncate('.stderr') | truncate('.stdout'))()
+    (StringIO('hello') | errmd5 >> '.stderr' | '.stdout')()
     with open('.stdout', 'rb') as f:
         assert f.read() == b'hello'
     with open('.stderr', 'rb') as f:
         assert f.read() == s(b'5d41402abc4b2a76b9719d911017c592\n')
-    (s('\nworld\n') | errmd5 >> append('.stderr') | append('.stdout'))()
+    (StringIO(s('\nworld\n')) | errmd5 >> '.stderr+' | '.stdout+')()
     with open('.stdout', 'rb') as f:
         assert f.read() == s(b'hello\nworld\n')
     with open('.stderr', 'rb') as f:
@@ -144,7 +143,7 @@ def test_iterator_output():
         chunks.append(chunk)
     assert chunks == ['123123123123123']
     chunks = []
-    for chunk in s(b'123\n') | errmd5 >> STDOUT | errmd5 >> STDOUT:
+    for chunk in BytesIO(s(b'123\n')) | errmd5 >> STDOUT | errmd5 >> STDOUT:
         chunks.append(chunk)
     assert chunks == [
         '123',
@@ -155,7 +154,7 @@ def test_iterator_output():
 
 def test_iterator_output_multiple_pipes():
     chunks = []
-    for chunk in s(b'123\n') | errmd5 >> PIPE | errmd5 >> PIPE:
+    for chunk in BytesIO(s(b'123\n')) | errmd5 >> PIPE | errmd5 >> PIPE:
         chunks.append(chunk)
     assert len(chunks) == 3
     assert (s('ba1f2511fc30423bdbb183fe33f3dd0f'), None, None) in chunks

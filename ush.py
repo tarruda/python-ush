@@ -316,22 +316,26 @@ def concurrent_communicate_with_threads(proc, read_streams):
 
 
 def setup_redirect(proc_opts, key):
-    close = False
     stream = proc_opts.get(key, None)
-    if isinstance(stream, FileOpenWrapper):
-        close = True
-        fobj = open(stream.path, stream.mode)
-        if stream.mode == 'ab':
-            # On MS Windows we need to explicitly the file position to the end
-            fobj.seek(0, os.SEEK_END)
-        stream = fobj
-        proc_opts[key] = stream
     if stream in (None, STDOUT, PIPE) or fileobj_has_fileno(stream):
-        # no changes required
-        return None, close
+        # Simple case which will be handled automatically by Popen: stream is
+        # STDOUT/PIPE or a file object backed by file.
+        return None, False
+    if is_string(stream):
+        # stream is a string representing a filename, we'll open the file with
+        # appropriate mode which will be set to proc_opts[key].
+        if key == 'stdin':
+            proc_opts[key] = open(stream, 'rb')
+        else:
+            if stream.endswith('+'):
+                proc_opts[key] = open(stream[:-1], 'ab')
+                # On MS Windows we need to explicitly the file position to the
+                # end or the file contents will be replaced.
+                proc_opts[key].seek(0, os.SEEK_END)
+            else:
+                proc_opts[key] = open(stream, 'wb')
+        return None, True
     if key == 'stdin':
-        if is_string(stream):
-            stream = BytesIO(to_cstr(stream))
         if hasattr(stream, 'read'):
             # replace with an iterator that yields data in up to 64k chunks.
             # This is done to avoid the yield-by-line logic when iterating
@@ -340,19 +344,7 @@ def setup_redirect(proc_opts, key):
         elif hasattr(stream, '__iter__'):
             stream = iter(stream)
     proc_opts[key] = PIPE
-    return stream, close
-
-
-def read(path):
-    return FileOpenWrapper('rb', path)
-
-
-def truncate(path):
-    return FileOpenWrapper('wb', path)
-
-
-def append(path):
-    return FileOpenWrapper('ab', path)
+    return stream, False
 
 
 def fileobj_to_iterator(fobj):
@@ -363,12 +355,6 @@ def fileobj_to_iterator(fobj):
                 break
             yield data
     return iterator()
-
-
-class FileOpenWrapper(object):
-    def __init__(self, mode, path):
-        self.mode = mode
-        self.path = path
 
 
 class RunningProcess(object):
@@ -445,17 +431,14 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
     def __or__(self, other):
         if isinstance(other, Shell):
             return other(self)
-        elif hasattr(other, 'write') or (
-          isinstance(other, FileOpenWrapper) and other.mode in ['wb', 'ab']):
-            # assume file-like obj
+        elif hasattr(other, 'write') or is_string(other):
             return Pipeline(self.commands[:-1] +
                             [self.commands[-1]._redirect('stdout', other)])
         assert isinstance(other, Command)
         return Pipeline(self.commands + [other])
 
     def __ror__(self, other):
-        if hasattr(other, '__iter__') or is_string(other) or (
-          isinstance(other, FileOpenWrapper) and other.mode == 'rb'):
+        if hasattr(other, '__iter__') or is_string(other):
             return Pipeline([self.commands[0]._redirect('stdin', other)] +
                             self.commands[1:])
         assert False, "Invalid"
