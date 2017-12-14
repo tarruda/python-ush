@@ -114,14 +114,14 @@ def validate_pipeline(commands):
             raise InvalidPipeline(msg)
 
 
-def wait(procs, throw_on_error):
+def wait(procs, raise_on_error):
     status_codes = []
-    result = tuple(iterate_outputs(procs, throw_on_error, status_codes))
+    result = tuple(iterate_outputs(procs, raise_on_error, status_codes))
     assert result == ()
     return tuple(status_codes)
 
 
-def iterate_outputs(procs, throw_on_error, status_codes):
+def iterate_outputs(procs, raise_on_error, status_codes):
     read_streams = [proc.stderr_stream for proc in procs if proc.stderr]
     if procs[-1].stdout:
         read_streams.append(procs[-1].stdout_stream)
@@ -144,7 +144,7 @@ def iterate_outputs(procs, throw_on_error, status_codes):
         except StopIteration:
             wchunk = None
     status_codes += [proc.wait() for proc in procs]
-    if throw_on_error and len(list(filter(lambda c: c != 0))):
+    if raise_on_error and len(list(filter(lambda c: c != 0, status_codes))):
         process_info = [
             (proc.args, proc.pid, proc.returncode) for proc in procs
         ]
@@ -446,8 +446,8 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
         assert False, "Invalid"
 
     def __call__(self):
-        procs, throw_on_error = self._spawn()
-        return wait(procs, throw_on_error)
+        procs, raise_on_error = self._spawn()
+        return wait(procs, raise_on_error)
 
     def __iter__(self):
         return self._iter(False)
@@ -455,15 +455,15 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
     def _iter(self, raw):
         pipeline = Pipeline(self.commands[:-1] +
                             [self.commands[-1]._redirect('stdout', PIPE)])
-        procs, throw_on_error = pipeline._spawn()
+        procs, raise_on_error = pipeline._spawn()
         pipe_count = sum(1 for proc in procs if proc.stderr)
         if procs[-1].stdout:
             pipe_count += 1
         if not pipe_count:
-            wait(procs, throw_on_error)
+            wait(procs, raise_on_error)
             # nothing to yield
             return
-        iterator = iterate_outputs(procs, throw_on_error, [])
+        iterator = iterate_outputs(procs, raise_on_error, [])
         if not raw:
             iterator = iterate_lines(iterator, trim_trailing_lf=True)
         if pipe_count == 1:
@@ -481,7 +481,7 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
 
     def _spawn(self):
         procs = []
-        throw_on_error = False
+        raise_on_error = False
         for index, command in enumerate(self.commands):
             close_in = False
             close_out = False
@@ -494,7 +494,7 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
             # copy argv/opts
             proc_argv = [str(a) for a in command.argv]
             proc_opts = command.opts.copy()
-            throw_on_error = throw_on_error or proc_opts.get('throw_on_error',
+            raise_on_error = raise_on_error or proc_opts.get('raise_on_error',
                                                              False)
             if is_first:
                 # first command in the pipeline may redirect stdin
@@ -530,14 +530,14 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
                 # is connected to the current process's stdin
                 procs[-1].stdout.close()
             procs.append(current_proc)
-        return procs, throw_on_error
+        return procs, raise_on_error
 
     def iter_raw(self):
         return self._iter(True)
 
 
 class Command(object):
-    OPTS = ('stdin', 'stdout', 'stderr', 'env', 'cwd', 'throw_on_error')
+    OPTS = ('stdin', 'stdout', 'stderr', 'env', 'cwd', 'raise_on_error')
 
     def __init__(self, argv, opts):
         self.argv = argv
