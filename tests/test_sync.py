@@ -80,7 +80,7 @@ def test_stderr_redirect():
     source = BytesIO()
     source.write(b'123\n')
     source.seek(0)
-    assert (source | errmd5 >> stderr_sink | errmd5 >> stderr_sink |
+    assert (source | errmd5(stderr=stderr_sink) | errmd5(stderr=stderr_sink) |
             sink)() == (0, 0)
     assert stderr_sink.getvalue() == (
         s(b'ba1f2511fc30423bdbb183fe33f3dd0f\n') * 2)
@@ -92,12 +92,13 @@ def test_stderr_redirect_to_stdout():
     source = BytesIO()
     source.write(s(b'123\n'))
     source.seek(0)
-    assert (source | errmd5 >> STDOUT | errmd5 | sink)() == (0, 0)
+    assert (source | errmd5(stderr=STDOUT) | errmd5 | sink)() == (0, 0)
     assert sink.getvalue() == s(b'123\n'
                                 b'ba1f2511fc30423bdbb183fe33f3dd0f\n')
     source.seek(0)
     sink.seek(0)
-    assert (source | errmd5 >> STDOUT | errmd5 >> STDOUT | sink)() == (0, 0)
+    assert (source | errmd5(stderr=STDOUT) | errmd5(stderr=STDOUT) |
+            sink)() == (0, 0)
     assert sink.getvalue() == s(b'123\n'
                                 b'ba1f2511fc30423bdbb183fe33f3dd0f\n'
                                 b'ba5d6480bba42f55a708ac7096374f7a\n')
@@ -119,12 +120,12 @@ def test_stdin_redirect_file():
 
 
 def test_stdout_stderr_redirect_file():
-    (StringIO('hello') | errmd5 >> '.stderr' | '.stdout')()
+    (StringIO('hello') | errmd5(stderr='.stderr') | '.stdout')()
     with open('.stdout', 'rb') as f:
         assert f.read() == b'hello'
     with open('.stderr', 'rb') as f:
         assert f.read() == s(b'5d41402abc4b2a76b9719d911017c592\n')
-    (StringIO(s('\nworld\n')) | errmd5 >> '.stderr+' | '.stdout+')()
+    (StringIO(s('\nworld\n')) | errmd5(stderr='.stderr+') | '.stdout+')()
     with open('.stdout', 'rb') as f:
         assert f.read() == s(b'hello\nworld\n')
     with open('.stderr', 'rb') as f:
@@ -143,7 +144,8 @@ def test_iterator_output():
         chunks.append(chunk)
     assert chunks == ['123123123123123']
     chunks = []
-    for chunk in BytesIO(s(b'123\n')) | errmd5 >> STDOUT | errmd5 >> STDOUT:
+    for chunk in (BytesIO(s(b'123\n')) | errmd5(stderr=STDOUT) |
+                  errmd5(stderr=STDOUT)):
         chunks.append(chunk)
     assert chunks == [
         '123',
@@ -154,7 +156,8 @@ def test_iterator_output():
 
 def test_iterator_output_multiple_pipes():
     chunks = []
-    for chunk in BytesIO(s(b'123\n')) | errmd5 >> PIPE | errmd5 >> PIPE:
+    for chunk in (BytesIO(s(b'123\n')) | errmd5(stderr=PIPE) |
+                  errmd5(stderr=PIPE)):
         chunks.append(chunk)
     assert len(chunks) == 3
     assert (s('ba1f2511fc30423bdbb183fe33f3dd0f'), None, None) in chunks
@@ -179,7 +182,7 @@ def test_big_data(chunk_factor):
     stderr_2 = None
     chunk_count = 0
     for err1, err2, chunk in (
-      generator() | errmd5 >> PIPE | errmd5 >> PIPE).iter_raw():
+      generator() | errmd5(stderr=PIPE) | errmd5(stderr=PIPE)).iter_raw():
         chunk_count += 1
         if err1 is not None:
             assert stderr_1 is None

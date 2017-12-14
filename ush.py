@@ -540,9 +540,10 @@ class Command(object):
     def __init__(self, argv, **opts):
         self.argv = argv
         self.opts = {}
-        for key in Command.OPTS:
-            if key in opts:
-                self.opts[key] = opts[key]
+        for key in opts:
+            if key not in Command.OPTS:
+                raise TypeError('Invalid keyword argument "{}"'.format(key))
+            self.opts[key] = opts[key]
 
     def __call__(self, *argv, **opts):
         if not argv and not opts:
@@ -582,9 +583,6 @@ class Command(object):
 
     def __ror__(self, other):
         return other | Pipeline([self])
-
-    def __rshift__(self, other):
-        return self._redirect('stderr', other)
 
     def iter_raw(self):
         return Pipeline([self]).iter_raw()
