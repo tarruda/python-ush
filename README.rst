@@ -2,8 +2,8 @@
 ush - Unix Shell
 ================
 
-Python library that provides a convenient API/DSL for invoking and interacting
-with external commands.
+Python library that provides a convenient but powerful API for interacting with
+external commands.
 
 Basic Usage
 -----------
@@ -23,7 +23,7 @@ exit code:
 >>> ls()
 (0,)
 
-Command arguments can be added like this:
+Command arguments can easily added:
 
 >>> ls('-l', '-a', '-h')
 ls -l -a -h
@@ -31,7 +31,7 @@ ls -l -a -h
 (0,)
 
 Adding arguments actually creates new `Command` instances with the appended
-arguments. If the same arguments are used in future invocations, it can be
+arguments. If the same arguments are to be used in future invocations, it can be
 useful to save to a variable:
 
 >>> ls = ls('--hide=__pycache__', '--hide=*.py*')
@@ -43,9 +43,9 @@ object:
 >>> str(ls)
 'bin\nLICENSE.txt\npytest.ini\nREADME.rst\nsetup.cfg\ntests\n'
 
-The `Command` instances are also iterable, which is useful to process commands
-that output a lot of data without consuming everything in memory. By default,
-the iterator treats the command output as utf-8 and yields one item per line:
+`Command` instances are also iterable, which is useful to process commands that
+output a lot of data without consuming everything in memory. By default, the
+iterator treats the command output as utf-8 and yields one item per line:
 
 >>> files = []
 >>> for line in ls:
@@ -66,8 +66,8 @@ an error:
 >>> ls('invalid-file')()
 (2,)
 
-If the command is passed `raise_on_error=True`, it will raise an exception if
-the command returns non-zero codes: 
+If the command is passed `raise_on_error=True`, it will raise an exception when
+the external command returns non-zero codes: 
 
 >>> ls('invalid-file', raise_on_error=True)()
 Traceback (most recent call last):
@@ -84,13 +84,26 @@ and `env` options, respectively:
 >>> ls(cwd='bin', env=new_env)()
 (0,)
 
+Default options
+---------------
+
+`Shell` instances act like a factory for `Command` objects, and can be used to
+hold default options for commands created by it:
+
+>>> sh = Shell(raise_on_error=True)
+>>> sort, cat, echo = sh(['sort', '--reverse'], 'cat', 'echo')
+
+The `sort`, `cat` and `echo` instances all have `raise_on_error=True` set. It is
+possible to override when calling the `Shell` object:
+
+>>> sort = sh(['sort', '--reverse'], cwd='bin', raise_on_error=False)
+
 Pipelines
 ---------
 
 Like with unix shells, it is possible to chain commands via the pipe (`|`)
 operator:
 
->>> sort = sh('sort')('--reverse')
 >>> ls | sort
 ls --hide=__pycache__ --hide=*.py* | sort --reverse
 
@@ -107,10 +120,9 @@ pipelines:
 Redirection
 -----------
 
-Redirecting stdin/stdout to files is also done with the `|` operator chained
-with strings representing the filename:
+Redirecting stdin/stdout to files is also done with the `|` operator, but
+chained with filenames instead of other `Command` instances:
 
->>> cat, echo = sh('cat', 'echo')
 >>> (ls | sort | '.stdout')()
 (0, 0)
 >>> str(cat('.stdout'))
@@ -118,12 +130,12 @@ with strings representing the filename:
 >>> str('setup.cfg' | cat)
 '[metadata]\ndescription-file = README.rst\n'
 
-In other words, a filename to the left side of the `|` will connect the file to
-the command's stdin, a filename to the right side of the `|` will write the
+In other words, a filename on the left side of the `|` will connect the file to
+the command's stdin, a filename on the right side of the `|` will write the
 command's stdout to the file.
 
-When redirecting stdout, the file is truncated. To append to the file, add the
-`+` suffix to the filename, For example:
+When redirecting stdout, the file is truncated by default. To append to the
+file, add the `+` suffix to the filename, For example:
 >>> (echo('some more data') | cat | '.stdout+')()
 (0, 0)
 >>> str(cat('.stdout'))
@@ -131,7 +143,7 @@ When redirecting stdout, the file is truncated. To append to the file, add the
 
 While only the first and last command of a pipeline may redirect stdin/stdout,
 any command in a pipeline may redirect stderr through the `stderr` option: 
->>> ls('invalid-file', stderr='.stderr')()
+>>> ls('invalid-file', stderr='.stderr', raise_on_error=False)()
 (2,)
 >>> str(cat('.stderr'))
 "ls: cannot access 'invalid-file': No such file or directory\n"
@@ -141,7 +153,13 @@ file-like object:
 
 >>> from six import BytesIO
 >>> sink = BytesIO()
->>> ls('invalid-file', stderr=sink)()
+>>> ls('invalid-file', stderr=sink, raise_on_error=False)()
 (2,)
 >>> sink.getvalue()
 b"ls: cannot access 'invalid-file': No such file or directory\n"
+>>> sink = BytesIO()
+>>> (BytesIO(b'some in-memory data') | cat | sink)()
+(0,)
+>>> sink.getvalue()
+b'some in-memory data'
+
