@@ -415,7 +415,7 @@ class Shell(object):
         command_opts = {}
         command_opts.update(self.defaults)
         command_opts.update(opts)
-        return Command(argv, command_opts)
+        return Command(argv, **command_opts)
 
 
 class PipelineBasePy3(object):
@@ -554,7 +554,7 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
 class Command(object):
     OPTS = ('stdin', 'stdout', 'stderr', 'env', 'cwd', 'raise_on_error')
 
-    def __init__(self, argv, opts):
+    def __init__(self, argv, **opts):
         self.argv = argv
         self.opts = {}
         for key in Command.OPTS:
@@ -569,7 +569,7 @@ class Command(object):
         for key in Command.OPTS:
             if key in opts:
                 new_opts[key] = opts[key]
-        return Command(self.argv + argv, new_opts)
+        return Command(self.argv + argv, **new_opts)
 
     def __repr__(self):
         argstr = ' '.join(self.argv)
