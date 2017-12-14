@@ -2,8 +2,8 @@
 ush - Unix Shell
 ================
 
-Python library that provides a convenient but powerful API for interacting with
-external commands.
+Python library that provides a convenient but powerful API for invoking external
+commands.
 
 Basic Usage
 -----------
