@@ -10,7 +10,7 @@ Basic Usage
 
 >>> from ush import Shell
 >>> sh = Shell()
->>> ls = sh.command('ls')
+>>> ls = sh('ls')
 
 The `ls` variable is a `Command` object that wraps the `ls` external command:
 
@@ -90,7 +90,7 @@ Pipelines
 Like with unix shells, it is possible to chain commands via the pipe (`|`)
 operator:
 
->>> sort = sh.command('sort')('--reverse')
+>>> sort = sh('sort')('--reverse')
 >>> ls | sort
 ls --hide=__pycache__ --hide=*.py* | sort --reverse
 
@@ -110,8 +110,7 @@ Redirection
 Redirecting stdin/stdout to files is also done with the `|` operator chained
 with strings representing the filename:
 
->>> cat = sh.command('cat')
->>> echo = sh.command('echo')
+>>> cat, echo = sh('cat', 'echo')
 >>> (ls | sort | '.stdout')()
 (0, 0)
 >>> str(cat('.stdout'))

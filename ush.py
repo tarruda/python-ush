@@ -397,11 +397,16 @@ class Shell(object):
     def __init__(self, **defaults):
         self.defaults = defaults
 
-    def command(self, *argv, **opts):
+    def __call__(self, *argvs, **opts):
         command_opts = {}
         command_opts.update(self.defaults)
         command_opts.update(opts)
-        return Command(argv, **command_opts)
+        rv = []
+        for argv in argvs:
+            if is_string(argv):
+                argv = [argv]
+            rv.append(Command(argv, **command_opts))
+        return rv[0] if len(rv) == 1 else rv
 
 
 class PipelineBasePy3(object):
@@ -538,7 +543,7 @@ class Command(object):
     OPTS = ('stdin', 'stdout', 'stderr', 'env', 'cwd', 'raise_on_error')
 
     def __init__(self, argv, **opts):
-        self.argv = argv
+        self.argv = tuple(argv)
         self.opts = {}
         for key in opts:
             if key not in Command.OPTS:

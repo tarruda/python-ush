@@ -6,7 +6,6 @@ from six import BytesIO, StringIO, PY2
 
 from helper import *
 
-
 repeat_hex = repeat('-c', '100', '0123456789abcdef')
 
 
