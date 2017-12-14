@@ -1,3 +1,4 @@
+import os
 import pytest
 
 from ush import iterate_lines
@@ -9,7 +10,7 @@ def chunk_iterator(data, chunk_size):
         data = data[chunk_size:]
 
 
-DATA = b'Lorem \nipsum dolor \nsit amet\n'
+DATA = 'Lorem {0}ipsum dolor {0}sit amet{0}'.format(os.linesep).encode('utf-8')
 
 
 @pytest.mark.parametrize('chunk_size', list(range(1, len(DATA))))

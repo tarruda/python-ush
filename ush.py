@@ -84,21 +84,24 @@ def remove_invalid_opts(opts):
     return new_opts
 
 
+LS = os.linesep
+LS_LEN = len(LS)
+
 def iterate_lines(chunk_iterator, trim_trailing_lf=False):
     remaining = {}
     for chunk, stream_id in chunk_iterator:
         chunk = remaining.get(stream_id, '') + chunk.decode('utf-8')
-        last_lf_index = -1
+        last_ls_index = -LS_LEN
         while True:
-            start = last_lf_index + 1
+            start = last_ls_index + LS_LEN
             try:
-                lf_index = chunk.index('\n', start)
+                ls_index = chunk.index(LS, start)
             except ValueError:
-                remaining[stream_id] = chunk[last_lf_index + 1:]
+                remaining[stream_id] = chunk[last_ls_index + LS_LEN:]
                 break
-            yield chunk[start:lf_index], stream_id
-            remaining[stream_id] = chunk[lf_index + 1:]
-            last_lf_index = lf_index
+            yield chunk[start:ls_index], stream_id
+            remaining[stream_id] = chunk[ls_index + LS_LEN:]
+            last_ls_index = ls_index
     for stream_id in remaining:
         line = remaining[stream_id]
         if line or not trim_trailing_lf:
