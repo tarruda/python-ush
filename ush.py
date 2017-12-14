@@ -603,6 +603,9 @@ class Command(object):
     def __rshift__(self, other):
         return self._redirect('stderr', other)
 
+    def iter_raw(self):
+        return Pipeline([self]).iter_raw()
+
     def _redirect(self, key, stream):
         if self.opts.get(key, None) is not None:
             raise AlreadyRedirected('command already redirects ' + key)
