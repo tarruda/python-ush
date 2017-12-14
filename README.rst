@@ -3,7 +3,21 @@ ush - Unix Shell
 ================
 
 Python library that provides a convenient but powerful API for invoking external
-commands.
+commands. Features:
+
+- Idiomatic API for invoking commands
+- Command chaining with `|`
+- Redirection
+- Windows/Unix support
+- Python2/3 support
+
+Installation
+------------
+
+.. code-block::
+
+  pip install ush
+
 
 Basic Usage
 -----------
