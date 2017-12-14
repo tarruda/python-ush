@@ -34,7 +34,7 @@ Adding arguments actually creates new `Command` instances with the appended
 arguments. If the same arguments are to be used in future invocations, it can be
 useful to save to a variable:
 
->>> ls = ls('--hide=__pycache__', '--hide=*.py*', '--hide=*.yml', '--hide=*.txt')
+>>> ls = ls('--hide=__pycache__', '--hide=*.py*', '--hide=*.yml', '--hide=*.txt', '--hide=venv')
 
 By default, standard input, output and error are inherited from the python
 process. To capture output, simply call `str()` or `unicode()` on the `Command`
@@ -110,7 +110,7 @@ Like with unix shells, it is possible to chain commands via the pipe (`|`)
 operator:
 
 >>> ls | sort
-ls --hide=__pycache__ --hide=*.py* --hide=*.yml --hide=*.txt | sort --reverse
+ls --hide=__pycache__ --hide=*.py* --hide=*.yml --hide=*.txt --hide=venv | sort --reverse
 
 Everything that can be done with single commands, can also be done with
 pipelines:
