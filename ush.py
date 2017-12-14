@@ -63,7 +63,8 @@ class AlreadyRedirected(Exception):
 
 class ProcessError(Exception):
     def __init__(self, process_info):
-        super(ProcessError, self).__init__('One or more commands failed')
+        msg = 'One or more commands failed: {}'.format(process_info)
+        super(ProcessError, self).__init__(msg)
         self.process_info = process_info
 
 
@@ -154,7 +155,7 @@ def iterate_outputs(procs, raise_on_error, status_codes):
     status_codes += [proc.wait() for proc in procs]
     if raise_on_error and len(list(filter(lambda c: c != 0, status_codes))):
         process_info = [
-            (proc.args, proc.pid, proc.returncode) for proc in procs
+            (proc.argv, proc.pid, proc.returncode) for proc in procs
         ]
         raise ProcessError(process_info)
 
@@ -371,11 +372,17 @@ class FileOpenWrapper(object):
 
 
 class RunningProcess(object):
-    def __init__(self, popen, stdin_stream, stdout_stream, stderr_stream):
+    def __init__(self, popen, stdin_stream, stdout_stream, stderr_stream,
+                 argv):
         self.popen = popen
         self.stdin_stream = stdin_stream
         self.stdout_stream = stdout_stream
         self.stderr_stream = stderr_stream
+        self.argv = argv
+
+    @property
+    def returncode(self):
+        return self.popen.returncode
 
     @property
     def stdin(self):
@@ -523,7 +530,7 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
             set_extra_popen_opts(proc_opts)
             current_proc = RunningProcess(
                 subprocess.Popen(proc_argv, **remove_invalid_opts(proc_opts)),
-                stdin_stream, stdout_stream, stderr_stream
+                stdin_stream, stdout_stream, stderr_stream, proc_argv
                 )
             # if files were opened and connected to the process stdio, close
             # our copies of the descriptors
