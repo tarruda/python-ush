@@ -75,6 +75,14 @@ def fileobj_has_fileno(fileobj):
         return False
 
 
+def remove_invalid_opts(opts):
+    new_opts = {}
+    new_opts.update(opts)
+    for opt in ('raise_on_error',):
+        if opt in new_opts: del new_opts[opt] 
+    return new_opts
+
+
 def iterate_lines(chunk_iterator, trim_trailing_lf=False):
     remaining = {}
     for chunk, stream_id in chunk_iterator:
@@ -514,7 +522,7 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
             stderr_stream, close_err = setup_redirect(proc_opts, 'stderr')
             set_extra_popen_opts(proc_opts)
             current_proc = RunningProcess(
-                subprocess.Popen(proc_argv, **proc_opts),
+                subprocess.Popen(proc_argv, **remove_invalid_opts(proc_opts)),
                 stdin_stream, stdout_stream, stderr_stream
                 )
             # if files were opened and connected to the process stdio, close
