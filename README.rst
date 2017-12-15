@@ -22,6 +22,7 @@ Installation
 Basic Usage
 -----------
 
+>>> import os; os.environ['LANG'] = 'C.UTF-8'  # predictable `ls` command sort order
 >>> from ush import Shell
 >>> sh = Shell()
 >>> ls = sh('ls')
@@ -55,7 +56,7 @@ process. To capture output, simply call `str()` or `unicode()` on the `Command`
 object:
 
 >>> str(ls)
-'bin\npytest.ini\nREADME.rst\nsetup.cfg\ntests\n'
+'README.rst\nbin\npytest.ini\nsetup.cfg\ntests\n'
 
 `Command` instances are also iterable, which is useful to process commands that
 output a lot of data without consuming everything in memory. By default, the
@@ -66,13 +67,13 @@ iterator treats the command output as utf-8 and yields one item per line:
 ...     files.append(line)
 ...
 >>> files
-[u'bin', u'pytest.ini', u'README.rst', u'setup.cfg', u'tests']
+[u'README.rst', u'bin', u'pytest.ini', u'setup.cfg', u'tests']
 
 It is possible to iterate on raw chunks of data (as received from the command)
 by calling the `iter_raw()` method.
 
 >>> list(ls.iter_raw())
-[b'bin\npytest.ini\nREADME.rst\nsetup.cfg\ntests\n']
+[b'README.rst\nbin\npytest.ini\nsetup.cfg\ntests\n']
 
 The normal behavior of invoking commands is return the exit code, even if it is
 an error:
@@ -132,9 +133,9 @@ pipelines:
 >>> (ls | sort)()
 (0, 0)
 >>> str(ls | sort)
-'tests\nsetup.cfg\nREADME.rst\npytest.ini\nbin\n'
+'tests\nsetup.cfg\npytest.ini\nbin\nREADME.rst\n'
 >>> list(ls | sort)
-[u'tests', u'setup.cfg', u'README.rst', u'pytest.ini', u'bin']
+[u'tests', u'setup.cfg', u'pytest.ini', u'bin', u'README.rst']
 
 Redirection
 -----------
@@ -145,9 +146,9 @@ chained with filenames instead of other `Command` instances:
 >>> (ls | sort | '.stdout')()
 (0, 0)
 >>> str(cat('.stdout'))
-'tests\nsetup.cfg\nREADME.rst\npytest.ini\nbin\n'
+'tests\nsetup.cfg\npytest.ini\nbin\nREADME.rst\n'
 >>> str('setup.cfg' | cat)
-'[metadata]\ndescription-file = README.rst\n'
+'[metadata]\ndescription-file = README.rst\n\n[bdist_wheel]\nuniversal=1\n'
 
 In other words, a filename on the left side of the `|` will connect the file to
 the command's stdin, a filename on the right side of the `|` will write the
@@ -158,14 +159,14 @@ file, add the `+` suffix to the filename, For example:
 >>> (echo('some more data') | cat | '.stdout+')()
 (0, 0)
 >>> str(cat('.stdout'))
-'tests\nsetup.cfg\nREADME.rst\npytest.ini\nbin\nsome more data\n'
+'tests\nsetup.cfg\npytest.ini\nbin\nREADME.rst\nsome more data\n'
 
 While only the first and last command of a pipeline may redirect stdin/stdout,
 any command in a pipeline may redirect stderr through the `stderr` option: 
 >>> ls('invalid-file', stderr='.stderr', raise_on_error=False)()
 (2,)
 >>> str(cat('.stderr'))
-"ls: cannot access 'invalid-file': No such file or directory\n"
+'ls: cannot access invalid-file: No such file or directory\n'
 
 Besides redirecting to/from filenames, it is possible to redirect to/from any
 file-like object:
@@ -175,7 +176,7 @@ file-like object:
 >>> ls('invalid-file', stderr=sink, raise_on_error=False)()
 (2,)
 >>> sink.getvalue()
-b"ls: cannot access 'invalid-file': No such file or directory\n"
+b'ls: cannot access invalid-file: No such file or directory\n'
 >>> sink = BytesIO()
 >>> (BytesIO(b'some in-memory data') | cat | sink)()
 (0,)
