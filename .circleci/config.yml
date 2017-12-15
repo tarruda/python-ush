@@ -1,35 +1,52 @@
 version: 2
+shared: &shared
+  working_directory: ~/python-ush
+  environment:
+    - BASH_ENV: ~/.bash_env
+  steps:
+    - run:
+        name: set bash environment
+        command: echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bash_env
+
+    - checkout
+
+    - run:
+        name: make dev-requirements.txt unique for the python version
+        command: |
+          echo "# $(python --version)" >> dev-requirements.txt
+          cat dev-requirements.txt
+
+    - restore_cache:
+        keys:
+        - dependencies-{{ checksum "dev-requirements.txt" }}
+        - dependencies-
+
+    - run:
+        name: install dependencies
+        command: |
+          pip install --user -r dev-requirements.txt
+
+    - save_cache:
+        paths: [ ~/.local ]
+        key: dependencies-{{ checksum "dev-requirements.txt" }}
+
+    - run:
+        name: run tests
+        command: |
+          pytest --doctest-glob=*.rst
 jobs:
-  build:
-    environment:
-      - LANG: en_US.UTF-8
+  python27:
+    <<: *shared
+    docker:
+      - image: circleci/python:2.7.13
+  python36:
+    <<: *shared
     docker:
       - image: circleci/python:3.6.1
-      
-    working_directory: ~/python-ush
 
-    steps:
-      - checkout
-
-      - restore_cache:
-          keys:
-          - v1-dependencies-{{ checksum "dev-requirements.txt" }}
-          - v1-dependencies-
-
-      - run:
-          name: install dependencies
-          command: |
-            python3 -m venv venv
-            . venv/bin/activate
-            pip install -r dev-requirements.txt
-
-      - save_cache:
-          paths:
-            - ./venv
-          key: v1-dependencies-{{ checksum "dev-requirements.txt" }}
-        
-      - run:
-          name: run tests
-          command: |
-            . venv/bin/activate
-            pytest --doctest-glob=*.rst
+workflows:
+  version: 2
+  test:
+    jobs:
+      - python27
+      - python36
