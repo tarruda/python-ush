@@ -123,6 +123,8 @@ It is possible to override when calling the `Shell` object:
 sort --reverse (cwd=bin)
 
 >>> sort = sort(cwd=None)
+>>> sort
+sort --reverse
 
 Pipelines
 ---------
@@ -162,6 +164,7 @@ command's stdout to the file.
 
 When redirecting stdout, the file is truncated by default. To append to the
 file, add the `+` suffix to the filename, For example:
+
 >>> (echo('some more data') | cat | '.stdout+')()
 (0, 0)
 >>> str(cat('.stdout'))
@@ -169,6 +172,7 @@ file, add the `+` suffix to the filename, For example:
 
 While only the first and last command of a pipeline may redirect stdin/stdout,
 any command in a pipeline may redirect stderr through the `stderr` option: 
+
 >>> ls('invalid-file', stderr='.stderr', raise_on_error=False)()
 (2,)
 >>> str(cat('.stderr'))
