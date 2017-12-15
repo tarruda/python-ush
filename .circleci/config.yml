@@ -6,7 +6,7 @@ shared: &shared
   steps:
     - run:
         name: set bash environment
-        command: echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bash_env
+        command: echo 'export PATH="${HOME}/.local/bin:${PATH}"' >> ~/.bash_env
 
     - checkout
 
@@ -34,19 +34,22 @@ shared: &shared
         name: run tests
         command: |
           pytest --doctest-glob=*.rst
+
 jobs:
-  python27:
+  "Python 2.7":
     <<: *shared
-    docker:
-      - image: circleci/python:2.7.13
-  python36:
+    docker: [image: "circleci/python:2.7"]
+  "Python 3.4":
     <<: *shared
-    docker:
-      - image: circleci/python:3.6.1
+    docker: [image: "circleci/python:3.4"]
+  "Python 3.5":
+    <<: *shared
+    docker: [image: "circleci/python:3.5"]
+  "Python 3.6":
+    <<: *shared
+    docker: [image: "circleci/python:3.6"]
 
 workflows:
   version: 2
   test:
-    jobs:
-      - python27
-      - python36
+    jobs: ["Python 2.7", "Python 3.4", "Python 3.5", "Python 3.6"]
