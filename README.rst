@@ -2,6 +2,12 @@
 ush - Unix Shell
 ================
 
+.. image:: https://circleci.com/gh/tarruda/python-ush.svg?style=svg
+    :target: https://circleci.com/gh/tarruda/python-ush
+
+.. image:: https://ci.appveyor.com/api/projects/status/p5n9fy83nx4ac24b?svg=true
+    :target: https://ci.appveyor.com/project/tarruda/python-ush
+
 Python library that provides a convenient but powerful API for invoking external
 commands. Features:
 
