@@ -9,14 +9,6 @@ from helper import *
 repeat_hex = repeat('-c', '100', '0123456789abcdef')
 
 
-def s(s):
-    """Helper to normalize linefeeds."""
-    if isinstance(s, bytes):
-        return s.replace(b'\n', os.linesep.encode())
-    else:
-        return s.replace('\n', os.linesep)
-
-
 def test_simple_success():
     assert cat('.textfile')() == (0,)
 
