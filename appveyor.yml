@@ -9,4 +9,4 @@ install:
   - "pip install -r dev-requirements.txt"
 
 test_script:
-  - "pytest --doctest-glob=*.txt"
+  - "pytest --doctest-glob=*.txt -vv"

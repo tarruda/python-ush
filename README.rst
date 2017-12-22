@@ -16,6 +16,7 @@ commands. Features:
 - Redirection
 - Windows/Unix support
 - Python2/3 support
+- Filename argument expansion (globbing)
 
 Installation
 ------------
@@ -221,6 +222,7 @@ environment by default:
 
 As shown in the above examples, setting the `env` option always merges the
 variables with previous invocations. To clear the value of the option, simply
+pass `None` as the `env` option:
 
 >>> env = env(env=None)
 >>> list(sorted(env | grep('^USH_TEST_')))
@@ -228,3 +230,32 @@ variables with previous invocations. To clear the value of the option, simply
 >>> env = env(env={'USH_TEST_VAR2': '2'})
 >>> list(sorted(env | grep('^USH_TEST_')))
 [u'USH_TEST_VAR1=v1', u'USH_TEST_VAR2=2']
+
+
+Globbing
+--------
+
+Arguments passed to `Command` instances can be subject to filename
+expansion. This feature is enabled with the `glob` option:
+
+>>> echo = echo(glob=True)
+>>> list(sorted(str(echo('*.py')).split()))
+['helper.py', 'setup.py', 'ush.py']
+
+To prevent messing with command switches, arguments starting with "-" are not
+expanded:
+
+>>> list(sorted(str(echo('-*.py')).split()))
+['-*.py']
+
+With Python 3.5+, this expansion can be recursive:
+
+>>> list(sorted(str(echo('**/__init__.py')).split())) # doctest: +SKIP
+['bin/__init__.py', 'tests/__init__.py']
+
+Expansion is done relative to the command's `cwd`:
+
+>>> list(sorted(str(echo('**/__init__.py', cwd='bin')).split())) # doctest: +SKIP
+['__init__.py']
+>>> list(sorted(str(echo('../**/__init__.py', cwd='bin')).split())) # doctest: +SKIP
+['../tests/__init__.py', '__init__.py']
