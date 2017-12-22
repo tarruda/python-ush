@@ -1,6 +1,8 @@
 import collections
 import errno
+import glob
 import os
+import re
 import subprocess
 import sys
 
@@ -9,6 +11,8 @@ STDOUT = subprocess.STDOUT
 PIPE = subprocess.PIPE
 DEVNULL = object()
 MAX_CHUNK_SIZE = 0xffff
+GLOB_PATTERNS = re.compile(r'(?:\*|\?|\[[^\]]+\])')
+GLOB_OPTS = {}
 
 # We have python2/3 compatibility, but don't want to rely on `six` package so
 # this script can be used independently.
@@ -33,6 +37,8 @@ except NameError:
             return obj
         return str(obj).encode('utf-8')
     PY3 = True
+    if sys.version_info >= (3, 5):
+        GLOB_OPTS = {'recursive': True}
 
 
 if sys.platform == 'win32':
@@ -66,6 +72,19 @@ class ProcessError(Exception):
         msg = 'One or more commands failed: {}'.format(process_info)
         super(ProcessError, self).__init__(msg)
         self.process_info = process_info
+
+
+def expand_filenames(argv, cwd):
+    def expand_arg(arg):
+        return [os.path.relpath(p, cwd)
+                for p in glob.iglob(os.path.join(cwd, arg), **GLOB_OPTS)]
+    rv = [argv[0]]
+    for arg in argv[1:]:
+        if arg and arg[0] != '-' and GLOB_PATTERNS.search(arg):
+            rv += expand_arg(arg)
+        else:
+            rv.append(arg)
+    return rv
 
 
 def update_opts_env(opts, extra_env):
@@ -104,7 +123,7 @@ def fileobj_has_fileno(fileobj):
 def remove_invalid_opts(opts):
     new_opts = {}
     new_opts.update(opts)
-    for opt in ('raise_on_error', 'merge_env'):
+    for opt in ('raise_on_error', 'merge_env', 'glob'):
         if opt in new_opts: del new_opts[opt] 
     return new_opts
 
@@ -547,6 +566,10 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
             # stderr may be set at any point in the pipeline
             stderr_stream, close_err = setup_redirect(proc_opts, 'stderr')
             set_extra_popen_opts(proc_opts)
+            if proc_opts.get('glob', False):
+                proc_argv = expand_filenames(
+                    proc_argv, os.path.realpath(
+                        proc_opts.get('cwd', os.curdir)))
             set_environment(proc_opts)
             current_proc = RunningProcess(
                 subprocess.Popen(proc_argv, **remove_invalid_opts(proc_opts)),
@@ -573,7 +596,7 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
 
 class Command(object):
     OPTS = ('stdin', 'stdout', 'stderr', 'env', 'cwd', 'raise_on_error',
-            'merge_env')
+            'merge_env', 'glob')
 
     def __init__(self, argv, **opts):
         self.argv = tuple(argv)

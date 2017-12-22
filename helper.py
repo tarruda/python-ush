@@ -3,7 +3,7 @@ import sys
 import ush
 
 __all__ = ('cat', 'env', 'fold', 'head', 'repeat', 'sha256sum', 'errmd5',
-           'STDOUT', 'PIPE', 's')
+           'pargs', 'STDOUT', 'PIPE', 's')
 
 SOURCE_ROOT = os.path.join(os.path.abspath(os.path.dirname(__file__)))
 TEST_BIN_DIR = os.path.join(SOURCE_ROOT, 'bin')
@@ -19,15 +19,15 @@ def commands(*names):
     return sh(*argvs)
 
 
-def s(s):
-    """Helper to normalize linefeeds."""
-    if isinstance(s, bytes):
-        return s.replace(b'\n', os.linesep.encode())
+def s(obj):
+    """Helper to normalize linefeeds in strings."""
+    if isinstance(obj, bytes):
+        return obj.replace(b'\n', os.linesep.encode())
     else:
-        return s.replace('\n', os.linesep)
+        return obj.replace('\n', os.linesep)
 
 
-cat, env, fold, head, repeat, sha256sum, errmd5 = commands(
-    'cat', 'env', 'fold', 'head', 'repeat', 'sha256sum', 'errmd5')
+cat, env, fold, head, repeat, sha256sum, errmd5, pargs = commands(
+    'cat', 'env', 'fold', 'head', 'repeat', 'sha256sum', 'errmd5', 'pargs')
 STDOUT = ush.STDOUT
 PIPE = ush.PIPE
