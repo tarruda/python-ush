@@ -193,3 +193,38 @@ b'ls: cannot access invalid-file: No such file or directory\n'
 >>> sink.getvalue()
 b'some in-memory data'
 
+
+Environment
+-----------
+
+Like with `subprocess.Popen`, environment variables are inherited by default,
+but there are some differences with how the `env` option is handled:
+
+1- The contents of the `env` option is merged with the current process's
+environment by default:
+
+>>> os.environ['USH_TEST_VAR1'] = 'v1'
+>>> env, grep = sh('env', 'grep', env={'USH_TEST_VAR2': 'v2'})
+>>> list(sorted(env(env={'USH_TEST_VAR3': 'v3'}) | grep('^USH_TEST_')))
+[u'USH_TEST_VAR1=v1', u'USH_TEST_VAR2=v2', u'USH_TEST_VAR3=v3']
+
+2- To disable merging with the current process's environment (and adopt
+`subprocess.Popen` behavior), pass `merge_env=False` with the `env` option.
+
+>>> list(sorted(env(env={'USH_TEST_VAR3': 'v3'}, merge_env=False) | grep('^USH_TEST_')))
+[u'USH_TEST_VAR2=v2', u'USH_TEST_VAR3=v3']
+
+3- Variables can be cleared in the child process by passing a `None` value.
+
+>>> list(sorted(env(env={'USH_TEST_VAR1': None}) | grep('^USH_TEST_')))
+[u'USH_TEST_VAR2=v2', u'USH_TEST_VAR3=v3']
+
+As shown in the above examples, setting the `env` option always merges the
+variables with previous invocations. To clear the value of the option, simply
+
+>>> env = env(env=None)
+>>> list(sorted(env | grep('^USH_TEST_')))
+[u'USH_TEST_VAR1=v1']
+>>> env = env(env={'USH_TEST_VAR2': '2'})
+>>> list(sorted(env | grep('^USH_TEST_')))
+[u'USH_TEST_VAR1=v1', u'USH_TEST_VAR2=2']

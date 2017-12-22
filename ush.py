@@ -68,6 +68,31 @@ class ProcessError(Exception):
         self.process_info = process_info
 
 
+def update_opts_env(opts, extra_env):
+    if extra_env is None:
+        del opts['env']
+        return
+    env = opts.get('env', None)
+    if not env:
+        env = {}
+        opts['env'] = env
+    env.update(extra_env)
+
+
+def set_environment(proc_opts):
+    env = proc_opts.get('env', None)
+    if env is None:
+        return
+    new_env = {}
+    if proc_opts.get('merge_env', True):
+        new_env.update(os.environ)
+    new_env.update(env)
+    # unset environment variables set to `None`
+    for k in list(new_env.keys()):
+        if new_env[k] is None: del new_env[k]
+    proc_opts['env'] = new_env
+
+
 def fileobj_has_fileno(fileobj):
     try:
         fileobj.fileno()
@@ -79,7 +104,7 @@ def fileobj_has_fileno(fileobj):
 def remove_invalid_opts(opts):
     new_opts = {}
     new_opts.update(opts)
-    for opt in ('raise_on_error',):
+    for opt in ('raise_on_error', 'merge_env'):
         if opt in new_opts: del new_opts[opt] 
     return new_opts
 
@@ -403,6 +428,9 @@ class Shell(object):
     def __call__(self, *argvs, **opts):
         command_opts = {}
         command_opts.update(self.defaults)
+        if 'env' in opts:
+            update_opts_env(command_opts, opts['env'])
+            del opts['env']
         command_opts.update(opts)
         rv = []
         for argv in argvs:
@@ -519,6 +547,7 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
             # stderr may be set at any point in the pipeline
             stderr_stream, close_err = setup_redirect(proc_opts, 'stderr')
             set_extra_popen_opts(proc_opts)
+            set_environment(proc_opts)
             current_proc = RunningProcess(
                 subprocess.Popen(proc_argv, **remove_invalid_opts(proc_opts)),
                 stdin_stream, stdout_stream, stderr_stream, proc_argv
@@ -543,7 +572,8 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
 
 
 class Command(object):
-    OPTS = ('stdin', 'stdout', 'stderr', 'env', 'cwd', 'raise_on_error')
+    OPTS = ('stdin', 'stdout', 'stderr', 'env', 'cwd', 'raise_on_error',
+            'merge_env')
 
     def __init__(self, argv, **opts):
         self.argv = tuple(argv)
@@ -558,6 +588,9 @@ class Command(object):
             # invoke the command
             return Pipeline([self])()
         new_opts = self.opts.copy()
+        if 'env' in opts:
+            update_opts_env(new_opts, opts['env'])
+            del opts['env']
         for key in Command.OPTS:
             if key in opts:
                 new_opts[key] = opts[key]
@@ -592,10 +625,10 @@ class Command(object):
     def __ror__(self, other):
         return other | Pipeline([self])
 
-    def iter_raw(self):
-        return Pipeline([self]).iter_raw()
-
     def _redirect(self, key, stream):
         if self.opts.get(key, None) is not None:
             raise AlreadyRedirected('command already redirects ' + key)
         return self(**{key: stream})
+
+    def iter_raw(self):
+        return Pipeline([self]).iter_raw()
