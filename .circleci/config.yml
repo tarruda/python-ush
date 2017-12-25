@@ -33,7 +33,7 @@ shared: &shared
     - run:
         name: run tests
         command: |
-          pytest --doctest-glob=*.rst -vv
+          LANG=C.UTF-8 pytest --doctest-glob=*.rst -vv
 
 jobs:
   "Python 2.7":

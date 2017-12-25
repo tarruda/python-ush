@@ -29,7 +29,6 @@ Installation
 Basic Usage
 -----------
 
->>> import os; os.environ['LANG'] = 'C.UTF-8'  # predictable `ls` command sort order
 >>> from ush import Shell
 >>> sh = Shell()
 >>> ls = sh('ls')
