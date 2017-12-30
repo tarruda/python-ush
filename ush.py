@@ -52,9 +52,14 @@ else:
     from signal import signal, SIGPIPE, SIG_DFL
     _PIPE_BUF = getattr(select, 'PIPE_BUF', 512)
     def set_extra_popen_opts(opts):
-        # Restore SIGPIPE default handler when forked. This is required for
-        # handling pipelines correctly.
-        opts['preexec_fn'] = lambda: signal(SIGPIPE, SIG_DFL)
+        user_preexec_fn = opts.get('preexec_fn', None)
+        def preexec_fn():
+            if user_preexec_fn:
+                user_preexec_fn()
+            # Restore SIGPIPE default handler when forked. This is required for
+            # handling pipelines correctly.
+            signal(SIGPIPE, SIG_DFL)
+        opts['preexec_fn'] = preexec_fn
     def concurrent_communicate(proc, read_streams):
         return concurrent_communicate_with_select(proc, read_streams)
 
@@ -595,8 +600,8 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
 
 
 class Command(object):
-    OPTS = ('stdin', 'stdout', 'stderr', 'env', 'cwd', 'raise_on_error',
-            'merge_env', 'glob')
+    OPTS = ('stdin', 'stdout', 'stderr', 'env', 'cwd', 'preexec_fn',
+            'raise_on_error', 'merge_env', 'glob')
 
     def __init__(self, argv, **opts):
         self.argv = tuple(argv)
