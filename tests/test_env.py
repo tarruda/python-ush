@@ -1,6 +1,6 @@
 import os
 
-from helper import env, s
+from helper import env, s, sh
 
 
 def setup_function(function):
@@ -29,4 +29,16 @@ def test_env_override():
 def test_unset_env():
     assert str(env(env={'USH_VAR1': None})) == s('USH_VAR2=var2\n')
     assert str(env(env={'USH_VAR1': None, 'USH_VAR2': None})) == ''
+
+
+def test_shell_setenv():
+    with sh.setenv({'USH_VAR9': 'var9'}):
+        assert str(env) == s('USH_VAR1=var1\nUSH_VAR2=var2\nUSH_VAR9=var9\n')
+        with sh.setenv({'USH_VAR2': None}):
+            assert str(env) == s('USH_VAR1=var1\nUSH_VAR9=var9\n')
+            with sh.setenv({'USH_VAR9': None}):
+                assert str(env) == s('USH_VAR1=var1\n')
+            assert str(env) == s('USH_VAR1=var1\nUSH_VAR9=var9\n')
+        assert str(env) == s('USH_VAR1=var1\nUSH_VAR2=var2\nUSH_VAR9=var9\n')
+    assert str(env) == s('USH_VAR1=var1\nUSH_VAR2=var2\n')
 
