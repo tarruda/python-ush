@@ -1,4 +1,5 @@
 import collections
+import contextlib
 import errno
 import glob
 import os
@@ -9,7 +10,7 @@ import sys
 
 STDOUT = subprocess.STDOUT
 PIPE = subprocess.PIPE
-DEVNULL = object()
+NULL = object()
 MAX_CHUNK_SIZE = 0xffff
 GLOB_PATTERNS = re.compile(r'(?:\*|\?|\[[^\]]+\])')
 GLOB_OPTS = {}
@@ -451,17 +452,21 @@ class Shell(object):
 
     def __call__(self, *argvs, **opts):
         command_opts = {}
-        command_opts.update(self.defaults)
-        if 'env' in opts:
-            update_opts_env(command_opts, opts['env'])
-            del opts['env']
         command_opts.update(opts)
         rv = []
         for argv in argvs:
             if is_string(argv):
                 argv = [argv]
-            rv.append(Command(argv, **command_opts))
+            rv.append(Command(argv, shell=self, **command_opts))
         return rv[0] if len(rv) == 1 else rv
+
+
+    @contextlib.contextmanager
+    def setenv(self, extra_env):
+        saved = self.defaults.get('env', {}).copy()
+        update_opts_env(self.defaults, extra_env)
+        yield
+        self.defaults['env'] = saved
 
 
 class PipelineBasePy3(object):
@@ -551,7 +556,7 @@ class Pipeline(PipelineBasePy3 if PY3 else PipelineBasePy2):
             stderr_stream = None
             # copy argv/opts
             proc_argv = [str(a) for a in command.argv]
-            proc_opts = command.opts.copy()
+            proc_opts = command.copy_opts()
             raise_on_error = raise_on_error or proc_opts.get('raise_on_error',
                                                              False)
             if is_first:
@@ -603,8 +608,9 @@ class Command(object):
     OPTS = ('stdin', 'stdout', 'stderr', 'env', 'cwd', 'preexec_fn',
             'raise_on_error', 'merge_env', 'glob')
 
-    def __init__(self, argv, **opts):
+    def __init__(self, argv, shell=None, **opts):
         self.argv = tuple(argv)
+        self.shell = shell
         self.opts = {}
         for key in opts:
             if key not in Command.OPTS:
@@ -622,13 +628,13 @@ class Command(object):
         for key in Command.OPTS:
             if key in opts:
                 new_opts[key] = opts[key]
-        return Command(self.argv + argv, **new_opts)
+        return Command(self.argv + argv, shell=self.shell, **new_opts)
 
     def __repr__(self):
         argstr = ' '.join(self.argv)
         optstr = ' '.join(
-            '{}={}'.format(key, self.opts.get(key))
-            for key in self.opts if self.opts.get(key, None) is not None
+            '{}={}'.format(key, self.get_opt(key))
+            for key in self.iter_opts() if self.get_opt(key, None) is not None
             )
         if optstr:
             return '{0} ({1})'.format(argstr, optstr)
@@ -654,9 +660,30 @@ class Command(object):
         return other | Pipeline([self])
 
     def _redirect(self, key, stream):
-        if self.opts.get(key, None) is not None:
+        if self.get_opt(key, None) is not None:
             raise AlreadyRedirected('command already redirects ' + key)
         return self(**{key: stream})
 
     def iter_raw(self):
         return Pipeline([self]).iter_raw()
+
+    def get_opt(self, opt, default=None):
+        if opt == 'env':
+            env = self.shell.defaults.get('env', {})
+            env.update(self.opts.get('env', {}))
+            return env
+        rv = self.opts.get(opt, NULL)
+        if rv is NULL:
+            rv = self.shell.defaults.get(opt, NULL)
+        if rv is NULL:
+            return default
+        return rv
+
+    def iter_opts(self):
+        return set(list(self.opts.keys()) + list(self.shell.defaults.keys()))
+
+    def copy_opts(self):
+        rv = {}
+        for opt in self.iter_opts():
+            rv[opt] = self.get_opt(opt)
+        return rv
