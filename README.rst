@@ -137,9 +137,9 @@ pipelines:
 >>> (ls | sort)()
 (0, 0)
 >>> str(ls | sort)
-'tests\nsetup.cfg\nREADME.rst\npytest.ini\nbin\n'
+'tests\nsetup.cfg\npytest.ini\nbin\nREADME.rst\n'
 >>> list(ls | sort)
-[u'tests', u'setup.cfg', u'README.rst', u'pytest.ini', u'bin']
+[u'tests', u'setup.cfg', u'pytest.ini', u'bin', u'README.rst']
 
 Redirection
 -----------
@@ -150,7 +150,7 @@ chained with filenames instead of other `Command` instances:
 >>> (ls | sort | '.stdout')()
 (0, 0)
 >>> str(cat('.stdout'))
-'tests\nsetup.cfg\nREADME.rst\npytest.ini\nbin\n'
+'tests\nsetup.cfg\npytest.ini\nbin\nREADME.rst\n'
 >>> str('setup.cfg' | cat)
 '[metadata]\ndescription-file = README.rst\n\n[bdist_wheel]\nuniversal=1\n'
 
@@ -164,7 +164,7 @@ file, add the `+` suffix to the filename, For example:
 >>> (echo('some more data') | cat | '.stdout+')()
 (0, 0)
 >>> str(cat('.stdout'))
-'tests\nsetup.cfg\nREADME.rst\npytest.ini\nbin\nsome more data\n'
+'tests\nsetup.cfg\npytest.ini\nbin\nREADME.rst\nsome more data\n'
 
 While only the first and last command of a pipeline may redirect stdin/stdout,
 any command in a pipeline may redirect stderr through the `stderr` option: 
@@ -172,7 +172,7 @@ any command in a pipeline may redirect stderr through the `stderr` option:
 >>> ls('invalid-file', stderr='.stderr', raise_on_error=False)()
 (2,)
 >>> str(cat('.stderr'))
-"ls: cannot access 'invalid-file': No such file or directory\n"
+'ls: cannot access invalid-file: No such file or directory\n'
 
 Besides redirecting to/from filenames, it is possible to redirect to/from any
 file-like object:
@@ -182,7 +182,7 @@ file-like object:
 >>> ls('invalid-file', stderr=sink, raise_on_error=False)()
 (2,)
 >>> sink.getvalue()
-b"ls: cannot access 'invalid-file': No such file or directory\n"
+b'ls: cannot access invalid-file: No such file or directory\n'
 >>> sink = BytesIO()
 >>> (BytesIO(b'some in-memory data') | cat | sink)()
 (0,)

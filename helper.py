@@ -27,7 +27,8 @@ def s(obj):
         return obj.replace('\n', os.linesep)
 
 
-cat, env, fold, head, repeat, sha256sum, errmd5, pargs = commands(
-    'cat', 'env', 'fold', 'head', 'repeat', 'sha256sum', 'errmd5', 'pargs')
+cat, env, fold, head, repeat, sha256sum, errmd5, pargs, pwd = commands(
+    'cat', 'env', 'fold', 'head', 'repeat', 'sha256sum', 'errmd5', 'pargs',
+    'pwd')
 STDOUT = ush.STDOUT
 PIPE = ush.PIPE
