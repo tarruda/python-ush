@@ -451,9 +451,13 @@ class RunningProcess(object):
 class Shell(object):
     def __init__(self, **defaults):
         self.envstack = []
+        self.dirstack = []
         if 'env' in defaults:
             self.envstack.append(defaults['env'])
             del defaults['env']
+        if 'cwd' in defaults:
+            self.dirstack.append(defaults['cwd'])
+            del defaults['cwd']
         self.defaults = defaults
 
     def __call__(self, *argvs, **opts):
@@ -470,6 +474,19 @@ class Shell(object):
         yield
         e = self.envstack.pop()
         assert e == env
+
+    @contextlib.contextmanager
+    def chdir(self, path):
+        if path[0] != '/':
+            # not absolute path, consider the current stack and join with the
+            # last path
+            if self.dirstack:
+                path = os.path.normpath('{}/{}'.format(self.dirstack[-1],
+                                                       path))
+        self.dirstack.append(path)
+        yield
+        p = self.dirstack.pop()
+        assert p == path
 
 
 class PipelineBasePy3(object):
@@ -679,9 +696,19 @@ class Command(object):
         env.update(self.opts.get('env', {}))
         return env
 
+    def get_cwd(self):
+        cwd = self.opts.get('cwd', None)
+        if cwd:
+            return cwd
+        if self.shell.dirstack:
+            return self.shell.dirstack[-1]
+        return None
+
     def get_opt(self, opt, default=None):
         if opt == 'env':
             return self.get_env()
+        if opt == 'cwd':
+            return self.get_cwd()
         rv = self.opts.get(opt, NULL)
         if rv is NULL:
             rv = self.shell.defaults.get(opt, NULL)
@@ -690,12 +717,13 @@ class Command(object):
         return rv
 
     def iter_opts(self):
-        return set(list(self.opts.keys()) +
-                   list(self.shell.defaults.keys()) +
-                   ['env'])
+        return set(list(self.opts.keys()) + list(self.shell.defaults.keys()) +
+                   ['cwd', 'env'])
 
     def copy_opts(self):
         rv = {}
         for opt in self.iter_opts():
-            rv[opt] = self.get_opt(opt)
+            val = self.get_opt(opt)
+            if val is not None:
+                rv[opt] = val
         return rv
