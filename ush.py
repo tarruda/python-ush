@@ -98,10 +98,12 @@ def update_opts_env(opts, extra_env):
         del opts['env']
         return
     env = opts.get('env', None)
-    if not env:
+    if env is None:
         env = {}
-        opts['env'] = env
+    else:
+        env = env.copy()
     env.update(extra_env)
+    opts['env'] = env
 
 
 def set_environment(proc_opts):
@@ -448,25 +450,26 @@ class RunningProcess(object):
 
 class Shell(object):
     def __init__(self, **defaults):
+        self.envstack = []
+        if 'env' in defaults:
+            self.envstack.append(defaults['env'])
+            del defaults['env']
         self.defaults = defaults
 
     def __call__(self, *argvs, **opts):
-        command_opts = {}
-        command_opts.update(opts)
         rv = []
         for argv in argvs:
             if is_string(argv):
                 argv = [argv]
-            rv.append(Command(argv, shell=self, **command_opts))
+            rv.append(Command(argv, shell=self, **opts))
         return rv[0] if len(rv) == 1 else rv
 
-
     @contextlib.contextmanager
-    def setenv(self, extra_env):
-        saved = self.defaults.get('env', {}).copy()
-        update_opts_env(self.defaults, extra_env)
+    def setenv(self, env):
+        self.envstack.append(env)
         yield
-        self.defaults['env'] = saved
+        e = self.envstack.pop()
+        assert e == env
 
 
 class PipelineBasePy3(object):
@@ -667,11 +670,18 @@ class Command(object):
     def iter_raw(self):
         return Pipeline([self]).iter_raw()
 
+    def get_env(self):
+        if not self.shell.envstack and 'env' not in self.opts:
+            return None
+        env = {}
+        for e in self.shell.envstack:
+            env.update(e)
+        env.update(self.opts.get('env', {}))
+        return env
+
     def get_opt(self, opt, default=None):
         if opt == 'env':
-            env = self.shell.defaults.get('env', {})
-            env.update(self.opts.get('env', {}))
-            return env
+            return self.get_env()
         rv = self.opts.get(opt, NULL)
         if rv is NULL:
             rv = self.shell.defaults.get(opt, NULL)
@@ -680,7 +690,9 @@ class Command(object):
         return rv
 
     def iter_opts(self):
-        return set(list(self.opts.keys()) + list(self.shell.defaults.keys()))
+        return set(list(self.opts.keys()) +
+                   list(self.shell.defaults.keys()) +
+                   ['env'])
 
     def copy_opts(self):
         rv = {}
