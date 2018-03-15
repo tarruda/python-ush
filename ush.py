@@ -26,7 +26,7 @@ try:
     xrange
     from Queue import Queue, Empty
     import StringIO
-    BytesIO = StringIO.StringIO
+    StringIO = BytesIO = StringIO.StringIO
     def is_string(o):
         return isinstance(o, basestring)
     to_cstr = str
@@ -35,6 +35,7 @@ except NameError:
     xrange = range
     from queue import Queue, Empty
     import io
+    StringIO = io.StringIO
     BytesIO = io.BytesIO
     def is_string(o):
         return isinstance(o, str) or isinstance(o, bytes)
@@ -417,6 +418,14 @@ def fileobj_to_iterator(fobj):
     return iterator()
 
 
+def echo(s):
+    if isinstance(s, str):
+        return StringIO(s)
+    else:
+        assert isinstance(s, bytes)
+        return BytesIO(s)
+
+
 class RunningProcess(object):
     def __init__(self, popen, stdin_stream, stdout_stream, stderr_stream,
                  argv):
@@ -465,6 +474,7 @@ class Shell(object):
             self.dirstack.append(defaults['cwd'])
             del defaults['cwd']
         self.defaults = defaults
+        self.echo = echo
 
     def __call__(self, *argvs, **opts):
         rv = []

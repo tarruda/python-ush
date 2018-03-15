@@ -100,10 +100,10 @@ def test_string_input_output():
     assert bytes(repeat('-c', '5', '123')) == b'123123123123123'
     if PY2:
         assert unicode(repeat('-c', '5', '123')) == u'123123123123123'
-    assert str(StringIO(s('abc\ndef')) | cat) == s('abc\ndef')
-    assert bytes(StringIO(s('abc\ndef')) | cat) == s(b'abc\ndef')
+    assert str(echo(s('abc\ndef')) | cat) == s('abc\ndef')
+    assert bytes(echo(s('abc\ndef')) | cat) == s(b'abc\ndef')
     if PY2:
-        assert unicode(StringIO(s('abc\ndef')) | cat) == s(u'abc\ndef')
+        assert unicode(echo(s('abc\ndef')) | cat) == s(u'abc\ndef')
 
 
 def test_stdin_redirect_file():
@@ -111,12 +111,12 @@ def test_stdin_redirect_file():
 
 
 def test_stdout_stderr_redirect_file():
-    (StringIO('hello') | errmd5(stderr='.stderr') | '.stdout')()
+    (echo('hello') | errmd5(stderr='.stderr') | '.stdout')()
     with open('.stdout', 'rb') as f:
         assert f.read() == b'hello'
     with open('.stderr', 'rb') as f:
         assert f.read() == s(b'5d41402abc4b2a76b9719d911017c592\n')
-    (StringIO(s('\nworld\n')) | errmd5(stderr='.stderr+') | '.stdout+')()
+    (echo(s('\nworld\n')) | errmd5(stderr='.stderr+') | '.stdout+')()
     with open('.stdout', 'rb') as f:
         assert f.read() == s(b'hello\nworld\n')
     with open('.stderr', 'rb') as f:
@@ -135,7 +135,7 @@ def test_iterator_output():
         chunks.append(chunk)
     assert chunks == ['123123123123123']
     chunks = []
-    for chunk in (BytesIO(s(b'123\n')) | errmd5(stderr=STDOUT) |
+    for chunk in (echo(s(b'123\n')) | errmd5(stderr=STDOUT) |
                   errmd5(stderr=STDOUT)):
         chunks.append(chunk)
     assert chunks == [
@@ -147,7 +147,7 @@ def test_iterator_output():
 
 def test_iterator_output_multiple_pipes():
     chunks = []
-    for chunk in (BytesIO(s(b'123\n')) | errmd5(stderr=PIPE) |
+    for chunk in (echo(s(b'123\n')) | errmd5(stderr=PIPE) |
                   errmd5(stderr=PIPE)):
         chunks.append(chunk)
     assert len(chunks) == 3

@@ -190,6 +190,22 @@ b"ls: cannot access 'invalid-file': No such file or directory\n"
 >>> sink.getvalue()
 b'some in-memory data'
 
+To simplify passing strings to stdin of commands, the ``sh.echo`` helper is
+provided:
+
+>>> sink = BytesIO()
+>>> (sh.echo('some in-memory data') | cat | sink)()
+(0,)
+>>> sink.getvalue()
+b'some in-memory data'
+
+>>> sink = BytesIO()
+>>> (sh.echo(b'some in-memory data') | cat | sink)()
+(0,)
+>>> sink.getvalue()
+b'some in-memory data'
+
+``sh.echo`` is just a small wrapper around ``BytesIO`` or ``StringIO``.
 
 Environment
 -----------
