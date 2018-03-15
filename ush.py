@@ -6,6 +6,11 @@ import os
 import re
 import subprocess
 import sys
+import types
+
+
+__all__ = ('Shell', 'Command', 'InvalidPipeline', 'AlreadyRedirected',
+           'ProcessError')
 
 
 STDOUT = subprocess.STDOUT
@@ -450,6 +455,7 @@ class RunningProcess(object):
 
 class Shell(object):
     def __init__(self, **defaults):
+        self.aliases = {}
         self.envstack = []
         self.dirstack = []
         if 'env' in defaults:
@@ -464,7 +470,9 @@ class Shell(object):
         rv = []
         for argv in argvs:
             if is_string(argv):
-                argv = [argv]
+                argv = self.aliases.get(argv, argv)
+                if is_string(argv):
+                    argv = [argv]
             rv.append(Command(argv, shell=self, **opts))
         return rv[0] if len(rv) == 1 else rv
 
@@ -487,6 +495,40 @@ class Shell(object):
         yield
         p = self.dirstack.pop()
         assert p == path
+
+    def alias(self, **aliases):
+        self.aliases.update(aliases)
+
+    def export_as_module(self, module_name, full_name=False):
+        if full_name:
+            sys.modules[module_name] = ShellModule(self, module_name)
+            return
+        if module_name in globals():
+            raise Exception('Name "{}" is already taken'.format(module_name))
+        full_module_name = __name__ + '.' + module_name
+        module = ShellModule(self, full_module_name)
+        sys.modules[full_module_name] = module
+        globals()[module_name] = module
+
+
+class ShellModule(types.ModuleType):
+    def __init__(self, shell, name):
+        self.__shell = shell
+        self.__file__ = '<frozen>'
+        self.__name__ = name
+        self.__package__ = __package__
+        self.__loader__ = None
+
+    def __repr__(self):
+        return repr(self.__shell)
+
+    def __getattr__(self, name):
+        if name.startswith('__'):
+            return super(ShellModule, self).__getattr__(name) 
+        attr = getattr(self.__shell, name, None)
+        if attr and name != 'export_as_module':
+            return attr
+        return self.__shell(name)
 
 
 class PipelineBasePy3(object):
@@ -727,3 +769,24 @@ class Command(object):
             if val is not None:
                 rv[opt] = val
         return rv
+
+builtin_sh = Shell(raise_on_error=True)
+builtin_sh.alias(
+    apt_cache='apt-cache',
+    apt_get='apt-get',
+    apt_key='apt-key',
+    dpkg_divert='dpkg-divert',
+    grub_install='grub-install',
+    grub_mkconfig='grub-mkconfig',
+    locale_gen='locale-gen',
+    mkfs_ext2='mkfs.ext2',
+    mkfs_ext3='mkfs.ext3',
+    mkfs_ext4='mkfs.ext4',
+    mkfs_vfat='mkfs.vfat',
+    qemu_img='qemu-img',
+    repo_add='repo-add',
+    update_grub='update-grub',
+    update_initramfs='update-initramfs',
+    update_locale='update-locale',
+    )
+builtin_sh.export_as_module('sh')
