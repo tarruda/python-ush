@@ -1,7 +1,7 @@
 from setuptools import setup
 
 
-VERSION = '3.1.0'
+VERSION = '4.0.0'
 REPO    = 'https://github.com/tarruda/python-ush'
 
 setup(
