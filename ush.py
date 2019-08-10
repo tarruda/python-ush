@@ -15,7 +15,11 @@ __all__ = ('Shell', 'Command', 'InvalidPipeline', 'AlreadyRedirected',
 
 STDOUT = subprocess.STDOUT
 PIPE = subprocess.PIPE
-NULL = object()
+# Some opts have None as a valid value, so we use EMPTY as a default value when
+# reading opts to determine if an option was passed.
+EMPTY = object()
+# Cross/platform /dev/null specifier alias
+NULL = os.devnull
 MAX_CHUNK_SIZE = 0xffff
 GLOB_PATTERNS = re.compile(r'(?:\*|\?|\[[^\]]+\])')
 GLOB_OPTS = {}
@@ -761,10 +765,10 @@ class Command(object):
             return self.get_env()
         if opt == 'cwd':
             return self.get_cwd()
-        rv = self.opts.get(opt, NULL)
-        if rv is NULL:
-            rv = self.shell.defaults.get(opt, NULL)
-        if rv is NULL:
+        rv = self.opts.get(opt, EMPTY)
+        if rv is EMPTY:
+            rv = self.shell.defaults.get(opt, EMPTY)
+        if rv is EMPTY:
             return default
         return rv
 
