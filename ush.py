@@ -691,7 +691,10 @@ class Command(object):
         for key in opts:
             if key not in Command.OPTS:
                 raise TypeError('Invalid keyword argument "{}"'.format(key))
-            self.opts[key] = opts[key]
+            value = opts[key]
+            if key == 'cwd' and value is not None:
+                value = str(value)
+            self.opts[key] = value
 
     def __call__(self, *argv, **opts):
         if not argv and not opts:
