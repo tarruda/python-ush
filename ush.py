@@ -499,6 +499,7 @@ class Shell(object):
 
     @contextlib.contextmanager
     def chdir(self, path):
+        path = str(path)  # allow pathlib.Path instances
         if path[0] != '/':
             # not absolute path, consider the current stack and join with the
             # last path
@@ -693,7 +694,7 @@ class Command(object):
                 raise TypeError('Invalid keyword argument "{}"'.format(key))
             value = opts[key]
             if key == 'cwd' and value is not None:
-                value = str(value)
+                value = str(value)  # allow pathlib.Path instances
             self.opts[key] = value
 
     def __call__(self, *argv, **opts):
